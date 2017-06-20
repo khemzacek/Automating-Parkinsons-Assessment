@@ -3,8 +3,7 @@ title: "Capstone Project Proposal"
 author: "Katherine Hemzacek"
 date: "June 18, 2017"
 output:
-  html_document:
-    df_print: paged
+  github_document:
 
 ---
 ## Abstract
@@ -40,9 +39,10 @@ The attributes include:
 * 2 subject demographics (age, gender)
 * 2 UPDRS scores (total, motor)
 * 16 signal attributes 
-    + 5 measures of variation in fundamental frequency (Jitter(%), Jitter(Abs), Jitter:RAP, Jitter:PPQ5, Jitter:DDP)
-    + 6 measures of variation in amplitude (Shimmer, Shimmer(dB), Shimmer:APQ3, Shimmer:APQ5, Shimmer:APQ11, Shimmer:DDA)
-    + 5 non-linear signal characteristics: NHR (Noise to Harmonics Ratio), HNR (Harmonics to Noise Ratio), RPDE (Recurrence Period Density Entropy), DFA (Detrended Fluctuation Analysis), PPE (Pitch Period Entropy)
+    + 5 measures of variation in fundamental frequency: Jitter(%), Jitter(Abs), Jitter:RAP, Jitter:PPQ5, Jitter:DDP
+    + 6 measures of variation in amplitude: Shimmer, Shimmer(dB), Shimmer:APQ3, Shimmer:APQ5, Shimmer:APQ11, Shimmer:DDA
+    + 2 measures of noise to harmonics ratio: NHR (Noise to Harmonics Ratio), HNR (Harmonics to Noise Ratio)
+    + 3 non-linear signal characteristics: RPDE (Recurrence Period Density Entropy), DFA (Detrended Fluctuation Analysis), PPE (Pitch Period Entropy)
 
 The dataset header is shown below:
 ```{r echo = FALSE}
