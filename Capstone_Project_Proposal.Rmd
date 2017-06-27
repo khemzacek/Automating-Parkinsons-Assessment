@@ -1,11 +1,7 @@
----
-title: "Capstone Project Proposal"
-author: "Katherine Hemzacek"
-date: "June 18, 2017"
-output:
-  github_document:
+# Capstone Project Proposal
+Katherine Hemzacek  
+June 18, 2017
 
----
 ## Abstract
 
 This project will create an algorithm that uses signal characteristics of voice recordings to predict Unified Parkinson's Disease Prediction Scale (UPDRS) scores, which are a standard measure of the severity of disability in Parkinson's patients. This could be implemented into the Kinetics Foundation's At Home Testing Device to aid in better disease progression monitoring, especially for remote patients.
@@ -26,7 +22,7 @@ This project will focus on the automated analysis of voice recordings resulting 
 
 This project will use the Oxford Parkinson's Disease Telemonitoring Dataset, available [here](https://archive.ics.uci.edu/ml/datasets/parkinsons+telemonitoring). It was donated to the UCI Machine Learning Repository on 2009-10-29 by Athanasios Tsanas and Max Little of the University of Oxford. 
 
-The voice recordings were obtained as part of a feasibility study for the AHTD^1^. A variety of signal processing techniques were then applied to each recording to calculate the signal attributes that are shown in the dataset referenced above^2^.
+The voice recordings were obtained as part of a feasibility study for the AHTD<sup>1</sup>. A variety of signal processing techniques were then applied to each recording to calculate the signal attributes that are shown in the dataset referenced above<sup>2</sup>.
 
 The overall dataset includes 22 attributes for 5875 observations.
 
