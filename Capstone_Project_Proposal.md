@@ -1,6 +1,6 @@
 Capstone Project Proposal
 ================
-Katherine Hemzacek
+Katherine Hemzacek  
 June 18, 2017
 
 Abstract
@@ -10,7 +10,7 @@ This project will create an algorithm that uses signal characteristics of voice 
 
 [GitHub Repository](https://github.com/khemzacek/Automating-Parkinsons-Assessment)
 
-![](AHTD.jpg)
+![](AHTD.jpg)  
 Fig 1: The At Home Testing Device (AHTD)
 
 Problem Setup
@@ -46,7 +46,7 @@ The attributes include:
 
 The dataset header is shown below:
 
-|  subject.|  age|  sex|  test\_time|  motor\_UPDRS|  total\_UPDRS|  Jitter...|  Jitter.Abs.|  Jitter.RAP|  Jitter.PPQ5|  Jitter.DDP|  Shimmer|  Shimmer.dB.|  Shimmer.APQ3|  Shimmer.APQ5|  Shimmer.APQ11|  Shimmer.DDA|       NHR|     HNR|     RPDE|      DFA|      PPE|
+|  subject\_number|  age|  sex|  test\_time|  motor\_UPDRS|  total\_UPDRS|  Jitter.Percent|  Jitter.Abs|  Jitter.RAP|  Jitter.PPQ5|  Jitter.DDP|  Shimmer|  Shimmer.dB|  Shimmer.APQ3|  Shimmer.APQ5|  Shimmer.APQ11|  Shimmer.DDA|       NHR|     HNR|     RPDE|      DFA|      PPE|
 |---------:|----:|----:|-----------:|-------------:|-------------:|----------:|------------:|-----------:|------------:|-----------:|--------:|------------:|-------------:|-------------:|--------------:|------------:|---------:|-------:|--------:|--------:|--------:|
 |         1|   72|    0|      5.6431|        28.199|        34.398|    0.00662|     3.38e-05|     0.00401|      0.00317|     0.01204|  0.02565|        0.230|       0.01438|       0.01309|        0.01662|      0.04314|  0.014290|  21.640|  0.41888|  0.54842|  0.16006|
 |         1|   72|    0|     12.6660|        28.447|        34.894|    0.00300|     1.68e-05|     0.00132|      0.00150|     0.00395|  0.02024|        0.179|       0.00994|       0.01072|        0.01689|      0.02982|  0.011112|  27.183|  0.43493|  0.56477|  0.10810|
