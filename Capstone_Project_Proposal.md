@@ -1,6 +1,6 @@
 Capstone Project Proposal
 ================
-Katherine Hemzacek
+Katherine Hemzacek  
 June 18, 2017
 
 Abstract
@@ -10,7 +10,7 @@ This project will create an algorithm that uses signal characteristics of voice 
 
 [GitHub Repository](https://github.com/khemzacek/Automating-Parkinsons-Assessment)
 
-![](AHTD.jpg)
+![](AHTD.jpg)  
 Fig 1: The At Home Testing Device (AHTD)
 
 Problem Setup
