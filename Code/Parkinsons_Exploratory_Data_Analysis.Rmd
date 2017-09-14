@@ -1,0 +1,937 @@
+---
+title: "Parkinsons Exploratory Analysis"
+author: "KHemzacek"
+date: "August 7, 2017"
+output: github_document
+---
+
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE}
+library("dplyr")
+library("tidyr")
+library("ggplot2")
+library("GGally")
+library("knitr")
+library("mice")
+
+parkinsons <- read.csv("parkinsons_clean.csv")
+```
+
+# Clustering
+## Number of Clusters
+```{r cluster_groups}
+cluster_data <- scale(select(parkinsons, Jitter_Percent:PPE))
+
+wssplot <- function(data, nc=15, seed=1234){
+	              wss <- (nrow(data)-1)*sum(apply(data,2,var))
+               	      for (i in 2:nc){
+		        set.seed(seed)
+	                wss[i] <- sum(kmeans(data, centers=i)$withinss)}
+	                
+		      plot(1:nc, wss, type="b", xlab="Number of Clusters",
+	                        ylab="Within groups sum of squares")
+}
+wssplot(cluster_data)
+# Maybe 2? no distinct bend...
+
+distances <- dist(cluster_data)
+clusterParkinsons <- hclust(distances, method = "ward.D")
+plot(clusterParkinsons)
+# Not clear, 2 or 3 clusters probably best
+
+```
+These methods do not indicate clearly a number of clusters that the data fall into. It appears that 2 or 3 clusters may be best, but no one number of clusters stands out as best.
+
+The primary purpose of this clustering was to determine if normal and loud observations are significantly different from each other. There are only two volume levels, so if volume levels are significantly different, this should show when the data is clustered in two groups.
+
+Secondarily, we want to see if the data clusters by some other variable. Clustering into two groups will show if observations cluster by gender and may at least begin to show if data clusters by some other variable. If we begin to see a trend in the two groups, we may be able to determine if a different number of groups would be better.
+
+## Hierarchical Clustering (2 Groups)
+```{r cluster_two}
+clusterGroups = cutree(clusterParkinsons, k = 2)
+clusterOne <- subset(parkinsons, clusterGroups == 1)
+clusterTwo <- subset(parkinsons, clusterGroups == 2)
+
+summary(clusterOne$Volume)
+# 1029/(1029 + 1523) = 0.4032132
+summary(clusterTwo$Volume)
+# 931/(931 + 2392) = 0.2801685
+# higher % loud in 1
+
+summary(clusterOne$sex)
+# 998/(998 + 1554) = 0.3910658
+summary(clusterTwo$sex)
+# 869/(869 + 2454) = 0.2615107
+# higher % female in 1
+
+summary(as.factor(clusterOne$subject_num))
+# some subjects under-represented, 31 and 36 missing
+# no significant gap to separate under-represented
+
+summary(clusterOne)
+summary(clusterTwo)
+
+```
+Trends
+* 1 older
+* more female in 1
+* motor and total UPDRS higher in 2*
+* Jitter variables higher in 2*
+* Shimmer variables higher in 2*
+* NHR higher in 2, HNR lower in 2*
+* RPDE, DFA, PPE higher in 2*
+* test day higher in 1
+* more loud in 1
+
+Trends with astrisk are present in mins and maxs as well as means and medians. Other trends are present in means and medians only or in ratios.
+
+
+## K-means Clustering (2 Groups)
+```{r kmeans_two}
+km_fit <- kmeans(cluster_data, centers = 2, iter.max = 1000)
+km_groups <- km_fit$cluster
+
+kmClusterOne <- subset(parkinsons, km_groups == 1)
+kmClusterTwo <- subset(parkinsons, km_groups == 2)
+
+summary(kmClusterOne)
+summary(kmClusterTwo)
+
+# sex
+# 146/220 = 0.6636364
+# 1721/5655 = 0.3043324
+
+# volume
+# 45/220 = 0.2045455
+# 1915/5655 = 0.3386384
+
+summary(as.factor(kmClusterOne$subject_num))
+# all subjects present, relatively evenly distributed
+summary(as.factor(kmClusterTwo$subject_num))
+# 25 of 42 subjects present
+# relatively few of most patients present (single digits) so 0 is not too odd given distribution
+# patient 36 has 107 in cluster 2 (significantly higher than others, almost half of all entries in cluster 2)
+```
+Cluster one is significantly smaller (only 220 obervations. Cluster two has 5655 observations.).
+
+Trends
+* 2 older
+* more female in 1
+* motor and total UPDRS higher in 1
+* Jitter higher in 1
+* Shimmer higher in 1
+* NHR higher in 1; HNR lower in 1
+* RPDE, PPE higher in 1
+* DFA same
+* test day higher in 2, time of day higher in 2
+* more loud in 2
+
+## Conclusions (2 Groups)
+Overall, the clusters are not especially meaningful. While the trends seem to indicate certain correlations (e.g. higher UPDRS with higher jitter and shimmer), the observations do not seem to separate into distinct clusters. Looking variable by variable, the centers (mean and median) are not very far from each other and there is significant overlap of the ranges. Also, the data does not seem to cluster by binary variables such as gender or volume level, indicating that the signal characteristics are likely not distinct for these binary groups. More analysis will need to be done to say with confidence that these groups are not significantly different from eachother.
+
+
+## K-means Clustering (42 groups)
+Clustering the data into 2 groups did not show a distinct binary division of the groups. However, one interesting finding of the k-means clustering was that one of the groups had significantly more observations from one of the subjects than from any other subject. This begs the question of wether the data would cluster neatly by subject. So, we will quickly try clustering into 42 groups to see what we see.
+
+```{r kmeans_subjects}
+big_km_fit <- kmeans(cluster_data, centers = 42, iter.max = 1000)
+big_km_groups <- big_km_fit$cluster
+
+bigKmClusterOne <- subset(parkinsons, big_km_groups == 1)
+summary(bigKmClusterOne)
+summary(as.factor(bigKmClusterOne$subject_num))
+
+bigKmClusterTwo <- subset(parkinsons, big_km_groups == 2)
+summary(bigKmClusterTwo)
+summary(as.factor(bigKmClusterTwo$subject_num))
+
+bigKmClusterThree <- subset(parkinsons, big_km_groups == 3)
+summary(bigKmClusterThree)
+summary(as.factor(bigKmClusterThree$subject_num))
+```
+Based on the first three groups, the data does not appear to cluster distinctly by subject. While certain subjects may be more common within a group, none of the groups show one person that stands out as most common. These groups also do not seem to be distinctly separated by any other variable.
+
+## Overall Conclusion
+The findings from clustering lead me to believe that the data is not clustered, but more continuous. There was not a clear answer as to the best number of clusters. Clustering into a logical number of groups (2 because of the binary variables gender and volume, 42 for the 42 subjects) lead to groups that did not have much separation between their centers and groups that overlapped each other significantly. These groups also did not show that they split by one of the factor variables we would have expected them to split by. Therefore, I don't believe that the data is clustered, but continuous. There will be correlation between variables, but not categorical divisions.
+
+# Volume Levels
+We still need to answer the question of wether normal and loud recordings should be considered replicates or distinct types of recordings. To answer this, we will look at the data in two ways - box and whisker plots of each variable for each patient, and a time series plot of the normal and loud recordings for each variable for each patient. We will also run a paired t-test within each variable to say with certianty whether normal and loud are significantly different from each other.
+
+## Create Averaged Dataset
+To explore the differences between normal and loud recordings, we will take the median of the 4 normal recordings and the median of the 2 loud recordings for each day for each patient.
+
+```{r volumeSplit_averaged}
+
+volSplit_avgd <- parkinsons %>% group_by(subject_num, test_day, Volume) %>% summarise_if(is.numeric, median)
+
+```
+
+## Plot Timeseries
+One variable at a time is plotted over time for each subject. Normal and loud are plotted in different colors to see the differences. At the moment, only a selection of representative variables is plotted (so that the number of plots isn't quite as overwhelming): one of the five jitter variables, one of the six shimmer variables, NHR (noise to harmonics ratio), RPDE, DFA, and PPE. The jitter and shimmer variables were very highly correlated within themselves, so only one of each was selected. HNR was not plotted because it is highly correlated with NHR. The rest of the signal characteristics were all plotted. The two UPDRS scores were also plotted over time (on the same graph as each other) as reference against the trends seen in the other variables.
+```{r timeseries}
+nrmLd_timeseries <- function(Y){
+  ggplot(volSplit_avgd, aes(x = test_day, y = select(volSplit_avgd, matches(Y)), color = Volume)) +
+    geom_point() +
+    geom_line() +
+    facet_wrap(~subject_num)
+}
+# Can't pass in variable/variable name...
+
+ggplot(volSplit_avgd, aes(x = test_day, y = Jitter_Percent, color = Volume)) +
+   geom_point() +
+   geom_line() +
+   facet_wrap(~subject_num)
+ggplot(volSplit_avgd, aes(x = test_day, y = Shimmer, color = Volume)) +
+   geom_point() +
+   geom_line() +
+   facet_wrap(~subject_num)
+ggplot(volSplit_avgd, aes(x = test_day, y = NHR, color = Volume)) +
+   geom_point() +
+   geom_line() +
+   facet_wrap(~subject_num)
+ggplot(volSplit_avgd, aes(x = test_day, y = RPDE, color = Volume)) +
+   geom_point() +
+   geom_line() +
+   facet_wrap(~subject_num)
+ggplot(volSplit_avgd, aes(x = test_day, y = DFA, color = Volume)) +
+   geom_point() +
+   geom_line() +
+   facet_wrap(~subject_num)
+ggplot(volSplit_avgd, aes(x = test_day, y = PPE, color = Volume)) +
+   geom_point() +
+   geom_line() +
+   facet_wrap(~subject_num)
+# representative selection of variables
+
+# and plot UPDRS
+ggplot(subset(volSplit_avgd, Volume == "normal"), aes(x = test_day)) +
+   geom_point(aes(y = motor_UPDRS), color = "red") +
+   geom_point(aes(y = total_UPDRS), color = "blue") +
+   ylab("UPDRS") +
+   facet_wrap(~subject_num)
+
+```
+
+
+## Outliers
+After plotting in this way, a couple of outliers become apparent: one of the data points from person #30 and all of the recordings from person #36.
+```{r examine_outliers}
+subset(parkinsons, Jitter_Percent >= 0.06)
+# this is why it didn't look like an outlier on the histogram of individual recordings - it's not the only recording that's up there, just the only day where all recordings were up there...
+
+filter(parkinsons, subject_num == 30, test_day == 33)
+# total of only 3 recordings taken that day, all normal volume, all outside of normal
+
+filter(parkinsons, subject_num == 30, test_day >= 25, test_day <= 40)
+# the usual 6 recordings were taken a week earlier (day 25, but no recordings in the week after)
+
+filter(parkinsons, subject_num == 30, test_day >= 25, test_day <= 47)
+# next set of recordings on day 47, all 6 expected recordings are there
+
+# subject 36 doesn't have a UPDRS score that's way out there... just signal characteristics that are way out there...
+```
+
+Patient 30 has one entry which is way outside of his other recordings and way outside the recordings of all other patients (at least in the traditional linear measures). Most of the recordings from patient 36 seem to be outside the norm relative to other patients. Patient 36 also sort of clustered into her own group in the kmeans clustering with 2 groups. At least for the purposes of not throwing off the scale for this exploration, the one recording from patient 30 and all recordings from patient 36 will be removed and the data replotted.
+
+```{r remove_plot_outliers}
+volSplit_avgd_clean <- filter(volSplit_avgd, subject_num != 36)
+volSplit_avgd_clean <- filter(volSplit_avgd_clean, subject_num != 30 | test_day != 33)
+
+```
+
+## Replot Timeseries
+Try again with the relative outlying data removed, so the rest of the data can be seen at an appropriate scale.
+```{r redo_timeseries}
+
+ggplot(volSplit_avgd_clean, aes(x = test_day, y = Jitter_Percent, color = Volume)) +
+   geom_point() +
+   geom_line() +
+   facet_wrap(~subject_num)
+ggplot(volSplit_avgd_clean, aes(x = test_day, y = Shimmer, color = Volume)) +
+   geom_point() +
+   geom_line() +
+   facet_wrap(~subject_num)
+ggplot(volSplit_avgd_clean, aes(x = test_day, y = NHR, color = Volume)) +
+   geom_point() +
+   geom_line() +
+   facet_wrap(~subject_num)
+ggplot(volSplit_avgd_clean, aes(x = test_day, y = RPDE, color = Volume)) +
+   geom_point() +
+   geom_line() +
+   facet_wrap(~subject_num)
+ggplot(volSplit_avgd_clean, aes(x = test_day, y = DFA, color = Volume)) +
+   geom_point() +
+   geom_line() +
+   facet_wrap(~subject_num)
+ggplot(volSplit_avgd_clean, aes(x = test_day, y = PPE, color = Volume)) +
+   geom_point() +
+   geom_line() +
+   facet_wrap(~subject_num)
+# representative selection of variables
+
+# and plot UPDRS
+ggplot(subset(volSplit_avgd_clean, Volume == "normal"), aes(x = test_day)) +
+   geom_point(aes(y = motor_UPDRS), color = "red") +
+   geom_point(aes(y = total_UPDRS), color = "blue") +
+   ylab("UPDRS") +
+   facet_wrap(~subject_num)
+
+```
+To varying degrees, the normal values tend to trend higher for each of these variables. This is probably most apparent in DFA values, where the set of normal-volume recordings are consistently, and distinctly higher than the loud-volume recordings for most of the patients. The trend can be seen in each of the other variables in at least some of the patients. (Jitter - 9, 10, 14, 16, 19, 23, 31, 40, 41, 42; Shimmer - 8, 9, 15, 16, 19, 31, 37, 41, 42; NHR - 9, 24, 41, 41; RPDE - 1, 4, 8, 9, 16, 18, 19, 41; PPE - 9, 10, 15, 16, 18, 19, 23, 24, 31, 32, 40, 41, 42). This seems to suggest treating different volume levels as different from each other.
+
+## Box and Whisker Plots
+As another way to view the overall difference between normal and loud recordings, box an whisker plots were created.
+```{r boxWhisker}
+ggplot(volSplit_avgd_clean, aes(x = Volume, y = Jitter_Percent)) +
+   geom_boxplot()
+ggplot(volSplit_avgd_clean, aes(x = Volume, y = Shimmer)) +
+   geom_boxplot()
+ggplot(volSplit_avgd_clean, aes(x = Volume, y = NHR)) +
+   geom_boxplot()
+ggplot(volSplit_avgd_clean, aes(x = Volume, y = RPDE)) +
+   geom_boxplot()
+ggplot(volSplit_avgd_clean, aes(x = Volume, y = DFA)) +
+   geom_boxplot()
+ggplot(volSplit_avgd_clean, aes(x = Volume, y = PPE)) +
+   geom_boxplot()
+
+```
+While there does not seem to be a significant difference between the two volume levels, there does seem to be a consistent trend that the normal recordings have a higher value of all of these signal characteristics. While the box and whisker plots show a lot of overlap of the quartiles, the normal group is, in each graph, higher than the loud group. This is sufficient to convince me that the two should be treated as separate, not as replicate data.
+
+We could graph the other variables to try to confirm this. However, even if only 6/16 variables show a notable difference, this seems sufficient justification to me to treat them as separate. Further, given the high correlation of the variables not graphed with other variables that were graphed, I would suspect that a similar pattern would show in the rest of the variables.
+
+## Conclusion
+Because of what I have seen in the above graphs, I am convinced that normal and loud recordings should be treated as separate, not replicate, data. They will be averaged separately from eachother.
+
+
+# Recordings/Patient/Day
+Two graphs follow which show the number of recordings per patient per day. 
+The first is a histogram of the number of recordings taken in a single day by a single patient. This shows that for the overwhelming majority of the days, the expected 6 recordings were taken. But on a fair number of days, only 5 recordings were taken. There are also a few days where only 3 or 4 recordings were taken, and more surprisingly, there were also a few days where 11 or 12 recordings were taken.
+
+The second graph shows, for each patient, the days over time when recordings were taken. The points are color-coded by the number of recordings taken that day. This shows that while some days have other than the 6 expected recordings, most of the variation comes from patients missing weeks in the middle, starting late or ending early relative to the expected time frame (0-26 weeks), or all of the above.
+
+```{r recs_perPatient_perDay, echo = FALSE}
+nRecsTime <- parkinsons %>% group_by(subject_num, test_day) %>% count()
+ggplot(nRecsTime, aes(x = n)) +
+  geom_histogram(binwidth = 1)
+ggplot(nRecsTime, aes(x = test_day/7, y = as.factor(subject_num), col = as.factor(n))) +
+  geom_point()
+```
+
+
+## Different Numbers of Recordings per Day
+We need to explore the days where a number other than 6 recordings were taken. Primarily, we need to look at days with 3 or 4 to see if normal and loud recordings were taken or only normal recordings, and we need to look at the days with 11 or 12 to see if these should be treated as two separate sets of recordings or just all averaged together on the same day.
+
+```{r odd_number_of_days}
+oddDays <- subset(nRecsTime, n != 6)
+# 81 days
+
+
+subset(oddDays, n == 3)
+# 2 days
+# 1st was determined to be outlier (person 30, day 33)
+# 2nd - person 37, day 7
+subset(parkinsons, subject_num == 37 & test_day == 7)
+subset(parkinsons, subject_num == 37 & test_day <= 7)
+# 2 normal, 1 loud; first day of recordings from person 37; not an outlier in variable values; maybe a test of the system; no reason to remove or alter
+
+
+subset(oddDays, n == 4)
+# 7 days
+# 1st - subj 9, day 4
+subset(parkinsons, subject_num == 9 & test_day == 4)
+# all 4 normal (loud data will be missing from this day); first day; not an outlier in variable values
+
+# 2nd - subj 20, day 172
+subset(parkinsons, subject_num == 20 & test_day == 172)
+# 3 normal, 1 loud; not an outlier in variable values; no reason to remove or alter
+
+# 3rd - subj 22, day 47
+subset(parkinsons, subject_num == 22 & test_day == 47)
+# 2 normal, 2 loud; not an outlier in variable values, though in Jitter and NHR these points (this one and the next, which is from the same patient) represent notable peaks in the loud recordings; not going to remove or alter
+
+# 4th - subj 22, day 145
+subset(parkinsons, subject_num == 22 & test_day == 145)
+# 3 normal, 1 loud; not an outlier in variable values, though in Jitter and NHR these points (this one and the previous, which is from the same patient) represent notable peaks in the loud recordings; not going to remove or alter
+
+# 5th - subj 26, day 38
+subset(parkinsons, subject_num == 26 & test_day == 38)
+# 2 normal, 2 loud; not an outlier in variable values; no reason to remove or alter
+
+# 6th - subj 27, day 182
+subset(parkinsons, subject_num == 27 & test_day == 182)
+# all 4 normal (loud data will be missing from this day); last day; not an outlier in variable values
+
+# 7th - subj 40, day 28
+subset(parkinsons, subject_num == 40 & test_day == 28)
+# 2 normal, 2 loud; not an outlier in variable values; no reason to remove or alter
+
+
+subset(oddDays, n == 11)
+# 1 day
+# subj 7, day 51
+oddEleven = subset(parkinsons, subject_num == 7 & test_day == 51)
+# 8 normal, 3 loud (1 loud missing); just over an hour between the end of the first set and the beginning of the second set
+summary(subset(oddEleven, time_of_day < 0.55))
+summary(subset(oddEleven, time_of_day > 0.55))
+# not significantly different from each other, 2nd slightly higher in most signal characteristics
+# 1st was somewhat higher than usual, may have motivated redo
+
+
+subset(oddDays, n == 12)
+# 3 days
+# 1st - subj 5, day 58
+twelveOne = subset(parkinsons, subject_num == 5 & test_day == 58)
+# 8 normal, 4 loud; about 22 min between the end of the first and beginning of the second set
+summary(subset(twelveOne, time_of_day < 0.57))
+summary(subset(twelveOne, time_of_day > 0.57))
+# not significantly different from each other, 1st higher in most signal characteristics
+# 1st doesn't seem too unusual
+
+# 2nd - subj 29, day 93
+twelveTwo = subset(parkinsons, subject_num == 29 & test_day == 93)
+# 8 normal, 4 loud; about 4 hrs between the end of the first and beginning of the second set
+summary(subset(twelveTwo, time_of_day < 0.5))
+summary(subset(twelveTwo, time_of_day > 0.5))
+# not significantly different from each other, different characteristics higher in each
+# 1st doesn't seem too unusual
+
+# 3rd - subj 35, day 48
+twelveThree = subset(parkinsons, subject_num == 35 & test_day == 48)
+# 8 normal, 4 loud; about 11 hrs between the end of the first and beginning of the second set
+summary(subset(twelveThree, time_of_day < 0.5))
+summary(subset(twelveThree, time_of_day > 0.5))
+# not significantly different from each other, 1st higher in most signal characteristics
+# 1st doesn't seem too unusual
+
+```
+
+The days on which there are less than 6 recordings, we primarily need to check if there are both normal and loud recordings and that the recordings are not way outside of normal. The first of the days with only 3 recordings had already been identified as an outlier point in the graphing of the variables over time. The second day with 3 had 2 normal and 1 loud and was not outside of normal. It will be kept as is.
+
+There were 7 days with 4 recordings. Five of these days had a split of normal and loud recordings and were not significant outliers. These points will be kept as is. The other 2 days with 4 recordings had only normal-volume recordings. After averaging the normal and loud recordings, these days will have missing data that will need to be addressed. These data could be interpolated based on the days on either side. However, one is the first day of recordings for that patient. The other is the last day of recordings for that patient. The two days before or after could still be used to find a slope and predict the data for those points. Alternatively, the incomplete data points could be removed.
+
+There were 68 days on which a patient took only 5 recordings. For the moment, these are assumed to have at least 1 normal and 1 loud recording each. Also, none of these points showed as significant outliers on the graphs. These will be kept as they are.
+
+There was one day on which a patient has 11 recordings. Within these 11, there were 8 normal and 3 loud recordings (2 sets, one set missing a loud recording). It was calculated that the second set of recordings were started about an hour after the first set was finished being recorded. The first set of recordings was above normal for that patient, which may have motivated the second set of recordings. With the two sets being recorded so closely together, it seems fairly likely that the second set was intended to be a do-over. However, the second set was actually slightly higher, and neither set could be considered a significantly outlying point, leading me to believe the first set was not a mistake. This would lead me to lean toward averaging all 11 together.
+
+There were three days on which a patient took 12 recordings. All of these days are made up of two complete sets of 6 containing 4 normal and 2 loud recordings. The second sets are not significantly different from their corresponding first sets. None of the first sets seem unusual, so if the second sets were intended as do-overs, the abnormality of the first set is not apparent in the signal characteristics. None of the sets are significant outliers so all of the data should probably be kept in some way. One of the days had about 22 min between the sets. With so little time between sets, it seems most appropriate to average all 12 recordings. It is hard to consider them 2 separate data points. Another of the days with 12 has about 11 hours between recordings. This seems like a day that could reasonably be treated as two data points. The last of the days with 12 recordings has 4 hours between sets. This is more borderline - it could be treated as two distinct sets or all 12 could be averaged together.
+
+Observations with no "loud"
+* subj 9, day 4
+* subj 27, day 182
+
+# Creating the Final Dataset
+In the final dataset, there will be one observation (row) for each patient for each day. The variables will consist of a median and IQR for each of the signal characteristics for both normal and loud volume levels. These new variables will be calculated from the set of all recordings taken on a given day by a particular patient. Mean and IQR will be used because not all of the variables are normally distributed.
+```{r parkinsons_averaged}
+
+# remove outlier observation
+parkinsons <- filter(parkinsons, subject_num != 30 | test_day != 33)
+
+# remove variables for which we do not need to do calculations
+parkPart <- parkinsons
+parkPart$age <- NULL
+parkPart$sex <- NULL
+parkPart$test_time <- NULL # permanently remove; represented in test_day, time_of_day
+parkPart$time_of_day <- NULL # to calculate for all 6, not norm/ld
+parkPart$motor_UPDRS <- NULL # to calculate for all 6, not norm/ld
+parkPart$total_UPDRS <- NULL # to calculate for all 6, not norm/ld
+
+# calculating new variables (median/IQR; normal/loud)
+parkinsons_averaged <- parkPart %>% group_by(subject_num, test_day, Volume) %>% summarise_if(is.numeric, funs(median, IQR))
+
+# separate subsets of normal and loud recordings
+parkNormal <- filter(parkinsons_averaged, Volume == "normal")
+parkLoud <- filter(parkinsons_averaged, Volume == "loud")
+
+# because separated by volume, volume label variable can be removed
+parkNormal$Volume <- NULL
+parkLoud$Volume <- NULL
+
+# add volume labels to variable names
+names(parkNormal)[3:length(parkNormal)] <- sub(pattern = "([A-z]+)", replacement = "normal_\\1", names(parkNormal)[3:length(parkNormal)])
+names(parkLoud)[3:length(parkLoud)] <- sub(pattern = "([A-z]+)", replacement = "loud_\\1", names(parkLoud)[3:length(parkLoud)])
+
+# join normal and loud data into single "wide" dataset
+parkAvgd <- full_join(parkNormal, parkLoud, by = c("subject_num", "test_day"))
+
+# add demographic data back in
+demographics <- select(parkinsons, subject_num, age, sex) %>% distinct()
+parkAvgd <- left_join(parkAvgd, demographics, by = "subject_num")
+
+# add time and UPDRS data back in
+otherVars <- parkinsons %>% group_by(subject_num, test_day) %>% summarise(time_of_day = median(time_of_day)*24, motor_UPDRS = median(motor_UPDRS), total_UPDRS = median(total_UPDRS))
+parkAvgd <- left_join(parkAvgd, otherVars, by = c("subject_num", "test_day"))
+# median(time_of_day) was multiplied by 24 to turn units into hours, make number easier to comprehend in relatable terms
+
+
+# add count
+nRecsTbl <- parkinsons %>% group_by(subject_num, test_day, Volume) %>% count()
+nRecsTbl <- spread(nRecsTbl, Volume, n)
+nRecsTbl <- rename(nRecsTbl, loud_recs_count = loud, normal_recs_count = normal)
+nRecsTbl[is.na(nRecsTbl)] <- 0
+parkAvgd <- left_join(parkAvgd, nRecsTbl, by = c("subject_num", "test_day"))
+
+# reorder
+parkAvgd <- parkAvgd[c(1, 67, 68, 2, 69, 72, 73, 70, 71, 3:66)]
+
+```
+
+Yay!
+
+```{r clean_averaged}
+# view observations where IQR variables == 0
+View(subset(parkAvgd, loud_PPE_IQR == 0 & loud_DFA_IQR == 0))
+# 23 observations, all with less than 6 observations
+
+subset(parkAvgd, normal_PPE_IQR == 0 & normal_DFA_IQR == 0)
+# returns empty tibble; as expected, all observations have at least 2 normal recordings
+
+View(subset(parkAvgd, is.na(loud_PPE_IQR)))
+# 2 observations, previously identified days with no loud recordings taken
+
+View(subset(parkAvgd, loud_recs_count < 2))
+# 25 observations with missing data
+
+# change IQR to NA where the IQR is calculated from a single number
+#parkAvgd$loud_Jitter_Percent_IQR[parkAvgd$count_loud_recs <2] <- NA
+parkAvgd[parkAvgd$loud_recs_count <2, 58:73] <- NA
+
+# all missing values should now be coded as NA
+```
+Because the dataset was clean before the averaged dataset was created, we expect it to be fairly clean. However, from what we know of the data structure, we know that certain summary statistics calculations will be problematic.
+
+The median function will return a reasonable central tendency descriptor as long as there is at least one value to calculate from. For most of the days, at least one normal and at least one loud recording are present. There are only two observations, noted earlier, where no loud recordings were taken. For these days, we expect an NA value for all loud variables, and this is what we observe was filled in automatically when the averaged dataset was generated.
+
+The IQR function will return a reasonable descriptor of variation as long as there are at least two values to calculate from. If the IQR function is run on only one value, the output will be 0. At least in the context of this data, 0 is not a good descriptor of the variation if the IQR is being calculated from only one recording. There are instances where the IQR of a characteristic was calculated from 2 values and the IQR was calculated to be 0. This would indicate that the two recordings gave the same value of that variable. In this case, it is reasonable for us to expect that if we took many more recordings, while they might not all be identical, there would likely be relatively low variation within them. Therefore, 0 is a reasonable descriptor of the variation. In the instance where IQR is calculated from one value, it is not reasonable to expect that many replicate recordings would have values close to each other. It is also not reasonable to expect that these values would be very spread out. We don't know anything about the variability if only one recording was taken, so the most appropriate IQR value in these instances is NA. Therefore, anywhere IQR was calculated from one recording, the value was changed to NA.
+
+After this change, all missing values should be coded as NA.
+
+The next question is whether we can fill these missing values with a reasonable guess. These variables are not highly linear over time, so linear interpolation doesn't necessarily make sense. Because of the way that the UPDRS scores were determined, UPDRS changes even from one day to the next, so subbing in an average of the values from other recordings of the same person at the same severity level isn't exactly an option.
+
+Using MICE to fill in data based on other recordings with similar signal characteristics is probably the best option for filling the missing information. However, it is recommended that MICE not be used if more than 5% of a variable or observation is missing. None of the variables are missing more than 3% of the data. However, all 25 of the observations with missing data have at least 20% of the data missing. So MICE may not be a sufficiently informed way of filling in this data.
+
+For now, the incomplete observations will be left as they are. The data that is not missing can be used to help calculate the correlation between variables. If the missing data later becomes a problem, MICE can be used to complete the dataset.
+
+In case MICE is used, the code that would be used is below:
+
+```{r mice, eval = FALSE}
+# select only variables that will be used to predict missing values
+predictors <- select(parkAvgd, -contains("count"), -contains("UPDRS"))
+
+# multiple imputation
+imputed <- complete(mice(predictors))
+
+# sub completed data back into dataframe
+parkComplete <- parkAvgd
+parkComplete[42:length(parkComplete)] <- select(imputed, contains("loud"))
+
+```
+
+
+```{r write_avgd_dataset}
+write.csv(parkAvgd, file = "parkinsons_averaged.csv", row.names = FALSE)
+```
+
+# Variable Distributions
+First, it would be interesting to look at the distribution of the values for each variable. A histogram will give us an idea of the shape of the data.
+
+## Jitter Variables
+```{r Jitter, echo = FALSE}
+ggpairs(select(parkinsons, contains("Jitter")))
+```
+
+right skewed, highly intercorrelated
+
+## Shimmer Variables
+```{r Shimmer, echo = FALSE}
+ggpairs(select(parkinsons, contains("Shimmer")))
+```
+
+right skewed, highly intercorrelated
+
+## Other Signal Characteristics
+```{r other_signal_Characteristics, echo = FALSE}
+ggpairs(select(parkinsons, NHR:PPE))
+```
+NHR is right skewed, HNR is slightly left skewed, RPDE relatively normal, DFA bimodal, PPE slightly right skewed
+
+lower intercorrelation
+
+## time_of_day distribution
+The time_of_day variable was calculated from the given variable test_time, which gave a single number that indicated the number of days since trial recruitment. The variable test_time had an integer component which referred to the whole number of days since recruitment and an integer component which in some way correlated to the time of day. However, it was unclear exactly how this non-integer component related to an actual time of day: 0 correlate to midnight on the first day of the trial, or did 0 correlate to the time of day when the patient finished signing all the paperwork on the day they were recruited? In other words, does the non-integer part of test_time refer to the time of day uniformly between patients? Does it give us meaningful information about whether the recording was taken in the morning, afternoon, or evening; or is this only useful internal to each patient for ordering of the recordings?
+
+Since the documentation that accompanied the dataset did not address this question, we can try to answer it based on the distribution of the data. We can create a histogram of the values and see if this histogram seems to correlate with meaningful times of the day. If time_of_day = 0 corresponds to a different time of day for each patient, we would expect the distribution to be somewhat uniform, and any peaks present would not correlate with times of the day when people are most likely to have taken these recordings. If time_of_day is a meaningful variable that correlates to the same times of day for each patient, then we would expect distinct peaks in the morning and evening, and possibly a peak around lunchtime (when people would have a break from work or other daily activities). We would expect a notable lack of recordings taken during the nighttime hours when people are typically asleep.
+
+```{r time_of_day_histogram}
+# histogram with 1 bin/hour
+hist(parkAvgd$time_of_day, breaks = 24)
+
+# hist has no data below 4; check that there is no data there
+subset(parkAvgd, time_of_day < 4)
+```
+
+The histogram seems to indicate that time_of_day does indeed correlate to a meaningful time of day that is a uniform scale for each patient. The following features correlate well to daily schedules:
+* No recordings taken 0-4 (midnight - 4am) when people are probably asleep
+* Distinct peak 9-10 (9-10am) when most people are probably awake but haven't left for their day
+* Recordings drop off in the middle of the day when people would likely be out and about
+* Smaller peak 18-20 (6-8pm) when people are likely home from their day but not yet asleep
+* Recordings trail off after 20 (later at night than 8pm) as more and more people are probably going to sleep
+
+One thing to keep in mind is that the sample population for this study is of the age when a good amount of them may be retired. These recordings also could be taken either on weekdays or weekends. In addition to normal variation of daily schedules within the whole of the population, these facts add a bit of uncertainty to the daily schedules that we assume (waking in the morning, leaving for the day, returning in the evening and going to sleep later in the evening). 
+
+However, even keeping this variability in daily schedule in mind, this histogram definitely seems to indicate that time_of_day is a meaningful variable with 0 correlating to midnight. I will assume that this is the case as I move forward with analysis.
+
+# Variable Correlations
+```{r}
+cor(select(parkinsons, -sex, -Volume))
+```
+all signal characteristics have a really low linear correlation with UPDRS (highest 0.16) (HNR, PPE)
+
+IMPORTANT NOTE: These distributions are of the data prior to averaging and have multiple recordings from each patient. These do not consist of independent observations.
+
+
+## Investigate Independent Observations
+
+```{r independent_observations}
+independent_selector <- function(matrix, X, N = 1, seed = NULL) {
+  set.seed(seed)
+  groups <- unique(X)  # vector of unique group names
+  index <- 1:length(X)  # create indices
+  table <- cbind(index, X)  # bind indices and group labels
+  
+  obsInd <- list(NULL)  # initiate list
+  for (i in 1:length(groups)){
+    group_i <- subset(table, X == groups[i])[ ,1]  # select all indices of one group
+    # randomly select N indices of group i
+    obsInd[[i]] <- sample(group_i, size = N)
+  }
+  obsLogical <- index %in% unlist(obsInd)  # create logical vector where selected indices = TRUE
+
+  selection <- subset(matrix, obsLogical == TRUE)
+  return(selection)
+}
+
+# parkAvgd$subject_num <- as.factor(parkAvgd$subject_num)
+# parkAvgd$subject_num <- as.numeric(parkAvgd$subject_num)
+
+runOne <- independent_selector(parkAvgd, parkAvgd$subject_num)
+runTwo <- independent_selector(parkAvgd, parkAvgd$subject_num)
+runThree <- independent_selector(parkAvgd, parkAvgd$subject_num)
+runFour <- independent_selector(parkAvgd, parkAvgd$subject_num)
+runFive <- independent_selector(parkAvgd, parkAvgd$subject_num)
+
+```
+
+Selected one random observation from each person.
+
+```{r correlations}
+corMatrixOne <- cor(select(runOne, -sex, -loud_recs_count, -normal_recs_count), use = "pairwise")
+corMatrixTwo <- cor(select(runTwo, -sex, -loud_recs_count, -normal_recs_count), use = "pairwise")
+corMatrixThree <- cor(select(runThree, -sex, -loud_recs_count, -normal_recs_count), use = "pairwise")
+corMatrixFour <- cor(select(runFour, -sex, -loud_recs_count, -normal_recs_count), use = "pairwise")
+corMatrixFive <- cor(select(runFive, -sex, -loud_recs_count, -normal_recs_count), use = "pairwise")
+
+```
+
+There is a fair amount of variation looking at 5 sets of correlation coefficients for almost 70 variables of interest. It is difficult to process the most salient features. We need to better automate this process to obtain more repetitions of the process and these should be represented graphically to get a better idea of which are most important.
+
+```{r automate_correlation}
+# select only variables for which linear corelation coefficient can and should be calculated
+corVariables <- select(parkAvgd, -sex, -loud_recs_count, -normal_recs_count, -test_day)
+
+N = 100 # number of sets independent obs/replicate correlation calculations
+
+# create list of correlation matrices with all features
+corCoeff <- list(NULL) # initiate list
+for(i in 1:N){
+  selection <- independent_selector(corVariables, corVariables$subject_num)
+  corCoeff[[i]] <- cor(selection, use = "pairwise")
+}
+
+# aggregate correlation coefficients relating motor UPDRS to other features
+# each row is one obs of coeffs from one replicate calculation
+updrs_correlation <- corCoeff[[1]][5, ] # initiate matrix
+for(i in 2:N){
+  updrs_correlation <- rbind(updrs_correlation, corCoeff[[i]][5, ])
+}
+
+# change to dataframe
+row.names(updrs_correlation) <- NULL
+updrs_correlation <- as.data.frame(updrs_correlation)
+updrs_correlation$test_day <- NULL
+updrs_correlation$subject_num <- NULL
+updrs_correlation$motor_UPDRS <- NULL
+updrs_correlation$total_UPDRS <- NULL
+
+# transform to best shape for plotting
+plotRdata <- gather(updrs_correlation, "Feature", "Correlation", 1:66)
+
+# box-whisker plot of correlations with motor_UPDRS
+plot(as.factor(plotRdata$Feature), plotRdata$Correlation)
+lines(x = 0:67, y = rep(0, times = 68))
+lines(x = 0:67, y = rep(0.2, times = 68))
+lines(x = 0:67, y = rep(-0.2, times = 68))
+```
+
+Correlations of interest
+* age, sex (maybe subject_num as categorical variable only)
+* time of day
+* signal characteristics
+
+Plotting correlation coefficients:
+Best candidates (high median (pos/neg); low IQR)
+* age (pos)1
+* loud_HNR_median (neg)5
+* loud_NHR_median (pos)17??
+* loud_PPE_median (pos)19
+* loud_Shimmer_APQ11_median (pos)23
+* normal_DFA_median (neg)35?
+* normal_HNR_median (neg)37
+* normal_PPE_median (pos)51
+* normal_RPDE_median (pos)53
+* time_of_day (neg)66?
+NOTE: features with ? have a range that crosses 0
+
+Criteria:
+* median greater than +/-0.2 (or close to it)
+* relatively small spread
+* entire range doesn't cross 0 (too much...)
+
+## Intercorrelation
+save vector of candidate features
+select row.names == candidates / colnames == candidates
+use logicals to select relevant rows and columns from corCoeff
+select observations relevant to one feature
+convert matrix to dataframe
+create dataframe with one column for feature and one for correlation coeff
+make plot like above for each of the 10 variables
+
+```{r intercorrelation}
+candidates <- c("age", "loud_HNR_median", "loud_NHR_median", "loud_PPE_median", "loud_Shimmer_APQ11_median", "normal_DFA_median", "normal_HNR_median", "normal_PPE_median", "normal_RPDE_median", "time_of_day")
+
+# create list of only correlations between candidate features
+candCoeff <- list(NULL) # initiate list
+for(i in 1:length(corCoeff)){
+   candCoeff[[i]] <- subset(corCoeff[[i]], rownames(corCoeff[[i]]) %in% candidates, colnames(corCoeff[[i]]) %in% candidates)
+}
+
+# create list, each item containing all cor coeffs relating to one feature
+intercorrelation <- list(NULL) # initiate list
+for(i in 1:length(candidates)){
+  # delete previous matrix and initiate new matrix
+  candidate_correlation <- NULL
+  candidate_correlation <- subset(candCoeff[[1]], rownames(candCoeff[[1]]) == candidates[i])
+  
+  # select row of cor coeffs from each correlation matrix
+  for(j in 2:length(candCoeff)){
+    candidate_correlation <- rbind(candidate_correlation, subset(candCoeff[[j]], rownames(candCoeff[[j]]) == candidates[i]))
+  }
+  
+  # convert matrix to dataframe
+  rownames(candidate_correlation) <- NULL
+  candidate_correlation <- as.data.frame(candidate_correlation)
+  intercorrelation[[i]] <- candidate_correlation # save dataframe to list
+}
+names(intercorrelation) <- candidates
+
+for(i in 1:length(intercorrelation)){
+  plotData <- NULL
+  # transform data into best shape for plotting
+  plotData <- gather(intercorrelation[[i]], "Feature", "Correlation", 1:10)
+  # delete coefficients describing feature's correlation with itself
+  plotData <- subset(plotData, Feature != candidates[i])
+  # box plot of correlation coefficients, relating to one feature candidate
+  plot(as.factor(plotData$Feature), plotData$Correlation, main = candidates[i])
+  lines(x = 0:length(candidates), y = rep(0, times = length(candidates) + 1))
+  lines(x = 0:length(candidates), y = rep(0.2, times = length(candidates) + 1))
+  lines(x = 0:length(candidates), y = rep(-0.2, times = length(candidates) + 1))
+}
+
+```
+
+Sets:
+age, loud_NHR_median, normal_DFA_median
+loud_HNR_median, time_of_day, normal_DFA_median
+
+
+time_of_day <- probably shouldn't be used as it was used to interpolate outcome (though in a less significant way than test_day...)
+
+## time_of_day with motor_UPDRS
+
+```{r time_vs_UPDRS}
+plot(parkAvgd$time_of_day, parkAvgd$motor_UPDRS)
+
+ggplot(parkAvgd, aes(x = time_of_day, y = motor_UPDRS)) +
+  geom_point() +
+  facet_wrap(~subject_num)
+
+```
+
+If the correlation between time_of_day and motor_UPDRS was due to the way time_of_day was used to calculate interpolated motor_UPDRS, then the correlation would be positive. But the correlation is negative.
+
+Can we use age? While age is something that could be consistently known and would be the kind of thing that might help interpret other things, the UPDRS shouldn't be assumed to be higher just because age is higher...
+
+>>>> other correlation pairs
+
+# Patients data
+Some patient demographics are already included in the study (gender and age). However, we could also count the number of recordings for each patient, the length of time each patient participated in the study, overall change in UPDRS, typical time of day or variation in the time of day that they performed the tasks, and probably many other patient-particular statistics.
+
+```{r create_patient_data}
+# age, sex
+demographics <- select(parkinsons, subject_num, age, sex) %>% distinct()
+
+num_recordings <- parkinsons %>% group_by(subject_num) %>% count()
+num_recordings <- rename(num_recordings, num_recordings = n)
+num_test_days <- parkAvgd %>% group_by(subject_num) %>% count()
+num_test_days <- rename(num_test_days, num_test_days = n)
+
+start_end <- parkAvgd %>% group_by(subject_num) %>% summarise(first_day = min(test_day), last_day = max(test_day), days_in_study = last_day - first_day, first_motor_UPDRS = first(motor_UPDRS), last_motor_UPDRS = last(motor_UPDRS), change_motor_UPDRS = last_motor_UPDRS - first_motor_UPDRS, first_total_UPDRS = first(total_UPDRS), last_total_UPDRS = last(total_UPDRS), change_total_UPDRS = last_total_UPDRS - first_total_UPDRS)
+
+daytime <- parkAvgd %>% group_by(subject_num) %>% summarise(typical_time_of_day = median(time_of_day), variation_time_of_day = IQR(time_of_day))
+
+patient_data <- full_join(demographics, num_recordings, by = "subject_num")
+patient_data <- full_join(patient_data, num_test_days, by = "subject_num")
+patient_data <- full_join(patient_data, start_end, by = "subject_num")
+patient_data <- full_join(patient_data, daytime, by = "subject_num")
+
+patient_data <- mutate(patient_data, motor_progression = change_motor_UPDRS / days_in_study, total_progression = change_total_UPDRS / days_in_study, days_btwn_tests = days_in_study / num_test_days)
+
+write.csv(patient_data, file = "parkinsons_patient_data.csv", row.names = FALSE)
+
+```
+
+## Questions
+On average, did males or females have less time between tests?
+
+Did younger or older people have less time between tests?
+
+Is UPDRS progression faster for males/females?
+
+Is UPDRS progression faster for older/younger people?
+
+Did UPDRS progress faster if it started higher/lower?
+
+Did people who took recordings in the morning/evening have higher UPDRS/ faster progression?
+
+Does variation in time of day correlate with UPDRS/progression?
+
+Does age correlate with variation in time of day?
+
+```{r answers}
+gender_summary <- patient_data %>% group_by(sex) %>% summarise(age_mdn = median(age), age_IQR = IQR(age), days_btwn_tests_mdn = median(days_btwn_tests), days_btwn_tests_IQR = IQR(days_btwn_tests), typical_time_of_day_mdn = median(typical_time_of_day), typical_time_of_day_IQR = IQR(typical_time_of_day), variation_time_of_day_mdn = median(variation_time_of_day), variation_time_of_day_IQR = IQR(variation_time_of_day), motor_progression_mdn = median(motor_progression), motor_progression_IQR = IQR(motor_progression), total_progression_mdn = median(total_progression), total_progression_IQR = IQR(total_progression))
+# age very similar
+plot(patient_data$sex, patient_data$days_btwn_tests)
+# slightly more days between tests for females, but lower variation
+plot(patient_data$sex, patient_data$typical_time_of_day)
+# tests slightly later in day for females, but lower variation
+# males have more of a peak in the evenings, females just tail off into the evening
+hist(subset(patient_data, sex == "female")$typical_time_of_day)
+hist(subset(patient_data, sex == "male")$typical_time_of_day)
+# female - peak in morning, tails off; males - peak in morning, peak in evening, none in early afternoon
+plot(patient_data$sex, patient_data$motor_progression)
+plot(patient_data$sex, patient_data$total_progression)
+# females have slightly higher motor and total UPDRS
+
+cor(patient_data$age, patient_data$days_btwn_tests)
+# -0.3246805
+cor(patient_data$age, patient_data$variation_time_of_day)
+# -0.4784516
+cor(patient_data$age, patient_data$motor_progression)
+# 0.2224273
+cor(patient_data$age, patient_data$total_progression)
+# 0.07503611
+# most significant correlation: age/days_btwn_tests
+plot(patient_data$age, patient_data$days_btwn_tests)
+plot(patient_data$age, patient_data$variation_time_of_day)
+plot(patient_data$age, patient_data$motor_progression)
+plot(patient_data$age, patient_data$total_progression)
+# for days_btwn_tests, there is negative correlation: average days between seems to go down with age
+# variation_time_of_day also seems to go down with age
+# for progression, positive correlation seems to be driven by young (under 50 yrs) patients who actually have negative progression (show less disability at the end of the 6 months); The rest of the data actually seems to show a slight negative trend - older people demonstrate slower disease progression. Trend isn't that significant though
+
+cor(patient_data$first_motor_UPDRS, patient_data$motor_progression)
+# -0.2478741
+cor(patient_data$first_total_UPDRS, patient_data$total_progression)
+# -0.2226871
+# seems that if UPDRS starts higher, it progresses slower
+plot(patient_data$first_motor_UPDRS, patient_data$motor_progression)
+plot(patient_data$first_total_UPDRS, patient_data$total_progression)
+# there is a fair amount of spread around the central trend line, but a negative linear correlation seems to be a good description of the correlation between starting UPDRS and UPDRS progression (for both motor and total)
+
+cor(patient_data$typical_time_of_day, patient_data$motor_progression)
+# 0.2532598
+cor(patient_data$typical_time_of_day, patient_data$total_progression)
+# 0.1744276
+# this correlation is higher than expected. What might drive someone to choose to take recordings later in the day that might also drive faster disease progression?
+plot(patient_data$typical_time_of_day, patient_data$motor_progression)
+plot(patient_data$typical_time_of_day, patient_data$total_progression)
+# not super linear... but trend seems to be present (in motor, maybe not in total; total maybe driven by a couple of outliers)
+
+cor(patient_data$variation_time_of_day, patient_data$motor_progression)
+# -0.1593764
+cor(patient_data$variation_time_of_day, patient_data$total_progression)
+# -0.1849489
+plot(patient_data$variation_time_of_day, patient_data$motor_progression)
+plot(patient_data$variation_time_of_day, patient_data$total_progression)
+# most of this correlation driven by one outlier
+```
+
+
+# UPDRS normally distributed?
+First, we look at the data prior to any averaging or selection of a set of independent observations.
+```{r UPDRS, echo = FALSE}
+trials <- select(parkinsons, test_time, motor_UPDRS, total_UPDRS) %>% distinct()
+trials_thin <- gather(trials, "Score_Type", "Score", 2:3)
+ggplot(trials_thin, aes(x = Score, fill = Score_Type)) +
+  geom_histogram(binwidth = 5, position = "dodge")
+qqnorm(parkinsons$motor_UPDRS)
+qqnorm(parkinsons$total_UPDRS)
+```
+
+## Selection of Independent Observations Normally Distributed?
+We now look to see if the shape of the graph is different with a set of independent averaged observations.
+
+```{r}
+selectionA <- independent_selector(parkAvgd, parkAvgd$subject_num)
+selectionB <- independent_selector(parkAvgd, parkAvgd$subject_num)
+selectionC <- independent_selector(parkAvgd, parkAvgd$subject_num)
+
+qqnorm(selectionA$motor_UPDRS, main = "Normal Q-Q Plot: Selection A, Motor")
+qqnorm(selectionA$total_UPDRS, main = "Normal Q-Q Plot: Selection A, Total")
+qqnorm(selectionB$motor_UPDRS, main = "Normal Q-Q Plot: Selection B, Motor")
+qqnorm(selectionB$total_UPDRS, main = "Normal Q-Q Plot: Selection B, Total")
+qqnorm(selectionC$motor_UPDRS, main = "Normal Q-Q Plot: Selection C, Motor")
+qqnorm(selectionC$total_UPDRS, main = "Normal Q-Q Plot: Selection C, Total")
+
+```
+The three selections seem to show the same thing: both motor and total UPDRS are roughly normally distributed with slightly light tails. There are also a few small wiggles, but this is generally expected with any real-world data.
+
+# Split Train and Test Sets
+After creating final dataset, the set needs to be split into train/test sets for machine learning.
+
+```{r split_Test_Train}
+groupwise_split <- function(X, obsRatio = 2/3, groupRatio = 1, seed = NULL) {
+  set.seed(seed)
+  groups <- unique(X)  # vector of unique group names
+  index <- 1:length(X)  # create indices
+  table <- cbind(index, X)  # bind indices and group labels
+  
+  obsInd <- list(NULL)  # initiate list
+  for (i in 1:length(groups)){
+    group_i <- subset(table, X == groups[i])[ ,1]  # select all indices of one group
+    # randomly select % of indices of group i
+    obsInd[[i]] <- sample(group_i, round(obsRatio * length(group_i)))
+  }
+  obsLogical <- index %in% unlist(obsInd)  # create logical vector where selected indices = TRUE
+  
+  # randomly select % of groups; create logical vector with these groups=TRUE
+  groupLogical <- X %in% sample(groups, round(groupRatio * length(groups)))
+  
+  split <- ((obsLogical == TRUE) & (groupLogical == TRUE))
+  return(split)
+}
+
+split <- groupwise_split(parkAvgd$subject_num, obsRatio = .75, groupRatio = 37/42, seed = 1)
+
+train <- subset(parkAvgd, split == TRUE)
+test <- subset(parkAvgd, split == FALSE)
+```

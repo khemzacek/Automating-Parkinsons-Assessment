@@ -1,0 +1,281 @@
+---
+title: "Parkinsons Data Wrangling"
+author: "KHemzacek"
+date: "August 6, 2017"
+output: github_document
+---
+Before any analysis can be done on data, the data must first be cleaned to handle typos and missing values and transformed into data that is structured for analysis. This step is called data wrangling and it is the first step in a data science project after the data has been collected and preliminary questions have been asked.
+
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE}
+# load packages
+library("readxl")
+library("dplyr")
+library("tidyr")
+library("ggplot2")
+library("GGally")
+library("knitr")
+
+# load data
+parkinsons <- read.csv("parkinsons_data.csv")
+```
+
+# Data Structure and Summary
+The data is first viewed from a high level to see its general structure. This may reveal certain issues and direct further investigation for other issues.
+
+## Structure
+```{r structure, echo = FALSE}
+str(parkinsons)
+```
+
+Looking at the dataset structure shows the data dimensions (number of observations and variables), the names of the variables present, the variable classes, and the first 10 entries for each variable.
+
+### Dimensions
+Based on papers published about the dataset, we expect recordings (observations) from 42 subjects, each of whom should have taken 6 recordings each week for 6 months, or about `r 42*6*26` observations. We can see that we only have 5875 observations, so we will need to explore the number of recordings per patient to see if there are patients missing, full weeks missing, less than 6 recordings per patient per week, or if some other issue is present. We will explore this potential issue after we have cleaned up a few other issues.
+
+### Variables
+After looking past the dimensions, we first see that the variable names did not all read into R correctly. Variables like "Subect." and "Jitter..." likely had special characters present in the original name that were lost when read by R. These variables can be renamed:
+
+```{r rename, echo = FALSE}
+names(parkinsons) <- sub(pattern = "\\.", replacement = "_", 
+                         x = names(parkinsons))
+names(parkinsons) <- gsub(pattern = "\\.", replacement = "", 
+                          x = names(parkinsons))
+parkinsons <- rename(parkinsons, subject_num = subject_, 
+                     Jitter_Percent = Jitter_)
+names(parkinsons)
+```
+
+The binary variable "sex" is also somewhat confusing. Does a 0 represent male or female? This variable is also better encoded as a factor, not as an integer. Based on dataset documentation we know that 0 = male and 1 = female, so we can change the variable to a factor and rename the levels to make it easier for R to use and more clear to read, even in the absence of supplementary documentation.
+
+```{r sex, echo = FALSE}
+parkinsons$sex <- as.factor(parkinsons$sex)
+levels(parkinsons$sex) <- c("male", "female")
+str(parkinsons)
+```
+
+All other variable names and types seem reasonable and mostly expected.
+
+It is somewhat surprising that test_time (the time since trial recruitment) is non-integer (not rounded to the nearest day). But according to the dataset documentation, the integer part is the number of days since trial recruitment. The non-integer part must correlate to time of day, but may not refer to the time of day consistently between patients. We will create two new variables - test_day (the integer part of test_time) and time_of_day (the non-integer part of test_time) as these may be useful and interesting to explore at a later time.
+
+```{r mutate_time, echo = FALSE}
+parkinsons <- mutate(parkinsons, test_day = floor(test_time))
+parkinsons <- mutate(parkinsons, time_of_day = test_time - test_day)
+str(parkinsons)
+```
+
+Also, after reading the documentation, we know that of the 6 recordings that patients took each week, 4 of them were recorded at normal volume and 6 of them were recorded at a louder volume. However, a variable that indicates the volume of the recording is somewhat conspicuously missing. The researchers who made the dataset available were contacted to obtain the values of this variable. The information that they supplied can be added to the dataset as a new variable "Volume".
+
+```{r volume_labels, echo = FALSE}
+# According to source, indices should line up
+Volume <- read_excel("Xloud_normal.xlsx", sheet = "Loudness level",
+                     col_names = FALSE)
+if (dim(parkinsons)[1] == dim(Volume)[1]) {
+  parkinsons <- bind_cols(parkinsons, Volume)
+  str(parkinsons)
+} else {
+  print("Data dimensions do not match. Volume variable not added.")
+}
+```
+
+The volume variable has been added, but it doesn't have a descriptive name. We also want R to treat it as a factor variable, not a character variable. so we will rename the column and change the variable type.
+
+```{r fix_volume, echo = FALSE}
+parkinsons <- rename(parkinsons, Volume = X__1)
+parkinsons$Volume <- as.factor(parkinsons$Volume)
+str(parkinsons)
+```
+
+The first few entries of the variables are not surprising and do not raise any concern. However, the first few entries are not necessarily a good representation of the variable values as a whole. To get a better idea of the overall values, we will look at summary statistics for each variable.
+
+
+## Summary Statistics
+```{r, echo = FALSE}
+kable(summary(parkinsons))
+```
+
+A data table summary will show, for each variable, the minimum, maximum, median, mean and 1st and 3rd quartiles for numeric variables. It will show the number of observations belonging to each level for factor variables. It will also give a count of the "NA" entries present in any kind of variable if NAs are present. 
+
+Since this output shows no NA count, we know that there are no missing values (or at least no missing values that are coded as NA).
+
+We see that "subject_num" ranges from 1 to 42, so all expected patients seem to be present.
+
+A minimum below 0 in "test_time" is surprising and should be investigated. Having a data point from a patient before they were recruited into the trial (a negative time since recruitment) doesn't seem to make sense. But we will examine the recording(s) associated with this value to determine if this is likely a typo, or an anomoly in the scaling.
+
+```{r, echo = FALSE}
+kable(filter(parkinsons, test_time <= 0))
+```
+
+This output is all observations with a negative "test_time". We can see that there are actually 2 subjects, 34 and 42, that have such observations. Each of these subjects have 6 trials with a negative time, all on day -3 for subject 34 and all on day -4 for subject 42. Given that we expect 6 recordings per day per patient and each patient has 6 recordings labeled with a negative time, all on the same day for each patient, these entries are likely not typos. More likely, they represent sets of recordings taken prior to the patient officially agreeing to be a part of the study. Perhaps, the patient had asked to try the AHTD to see what was involved before agreeing to be a part of the study. Or perhaps they had agreed verbally but not yet finished all paperwork to enroll in the study. If the information from these test runs was kept, it would make sense to label these recordings with a negative time (e.g. -4 represents 4 days before the patient officially joined the study).
+
+Otherwise, the summary statistics do not seem concerning or especially surprising. However, histograms of the variables may be more enlightening when it comes to observing unexpected values or variable distribution shapes. We can also cross-reference information within subjects to make sure demographic information is consistent and there are no typos there.
+
+## Demographics Typos?
+While the fact that the observations are not independent presents some challenges, it does mean that we can cross-reference the observations for each patient to make sure there are no inconsistencies (typos) within the patients' demographics (age and sex).
+
+We use an if/else statement that checks if the number of subjects is equal to the number of unique observations of the demographic information. This check returns:
+```{r demographics, echo = FALSE}
+demographics <- select(parkinsons, subject_num, age, sex) %>% distinct()
+if (length(unique(parkinsons$subject_num)) == length(demographics$subject_num)) {
+  print("Demographics consistent. Number of subjects:")
+  length(demographics$subject_num)
+} else {
+  print("Demographics not consistent")
+}
+```
+
+The demographics are consistent within-patient.
+
+# Variable Distributions
+We will look further into the distributions of each variable to determine if there seem to be any significant outliers or values that appear more often than expected.
+
+## Recordings Across Patients and Time
+We had said earlier that we did not have the expected number of observations, and it would be good to explore the number of recordings per patient to see if there are patients missing, full weeks missing, less than 6 recordings per patient per week, or if some other issue is present.
+
+Based on above analysis, we know that all 42 expected patients are present in the dataset. But we do not know how many recordings each patient took. We can count the number of recordings for each patient, then look at the distribution of this count to see if most patients took the same number of recordings, or if this varied across patients.
+
+```{r nRecsOverall, echo = FALSE}
+nRecs <- parkinsons %>% group_by(subject_num) %>% count()
+ggplot(nRecs, aes(x = n)) +
+  geom_histogram(binwidth = 6)
+```
+
+We can see that the total number of recordings belonging to a patient is fairly varied. Most patients took less than the number we expected, (`r 6*26`). A few did take more than we expected. But this distribution does not show us why we do not see the expected number of recordings.
+
+To see the why, we can count the number of recordings that each patient took on each day that they took any recordings. This will tell us if subjects frequently stopped short of 6 recordings. Plotting the days on which each subject took recordings will also help us see if patients went full weeks without taking any recordings.
+
+```{r recs_perPatient_perDay, echo = FALSE}
+nRecsTime <- parkinsons %>% group_by(subject_num, test_day) %>% count()
+ggplot(nRecsTime, aes(x = n)) +
+  geom_histogram(binwidth = 1)
+ggplot(nRecsTime, aes(x = test_day/7, y = as.factor(subject_num), col = as.factor(n))) +
+  geom_point()
+```
+
+The histogram shows us that on the large majority of days where patients took any recordings, they took 6 recordings. There are a fair number of times when 5 recordings were taken on a given day. There are also a few other times when 3, 4, 11, or 12 recordings were taken in one day. The days with 11 or 12 most likely represent a subject performing the set of exercises two distinct times in the same day. The days with 3, 4, or 5 recordings likely represent the subject not completing all 6 recordings. When the recordings for each subject each day are averaged, the days with less than 6 recordings will just be an average of the recordings that were taken (3, 4, or 5), rather than an average of 6. The days with 11 or 12 will have to be explored to see if these should all be averaged together or as two sets of 6 (or set of 5 and set of 6 for those with 11).
+
+The points for each subject over time show that subjects definitely skipped some weeks. Some subjects seem to have started later, ended early or both (relative to our expected time frame of 0-26 weeks). There are also some subjects who have weeks in the middle that were skipped. Likely, none of these discrepencies represent typos or mistakes in data recording. These missing observations will also not affect our ability to create the averaged data set or our ability to determine correlation between UPDRS scores and signal characteristics. So for the moment, we can accept this missing data as is. But it may be good to keep in mind for other types of analysis.
+
+## Demographics
+From cross-referencing within each subject, we are fairly sure there aren't any typos in the demographics data, but we should check for surprising shapes.
+
+```{r sex_summary, echo = FALSE}
+kable(summary(demographics$sex))
+```
+
+We would expect a ratio of 50/50, so the fact that the dataset has twice as many male participants as female participants is surprising. However, this likely does not suggest a problem with the data, just a reality of the trial.
+
+```{r age_distrib, echo = FALSE}
+ggplot(demographics, aes(age)) +
+  geom_histogram(binwidth = 5)
+```
+
+Age is roughly normally distributed. Nothing in this shape represents any serious concern. The point near 35 seems like it could be considered an outlier, but given the small sample size, it does not seem overly surprising, or outside of a normal bell curve. There is also no real reason to discard this subject or assume that the data represents an anomoly in the way something was recorded. This was likely the real age of the patient and is not a reason to discount their data.
+
+## Volume Level Ratio
+We expect an approximate ratio of 4 normal volume recordings to every 2 loud recordings.
+
+```{r volume_ratio, echo=FALSE}
+kable(summary(parkinsons$Volume))
+```
+
+The ratio loud/normal = `r sum(parkinsons$Volume == "loud") / sum(parkinsons$Volume == "normal")` is very close to 2/4 = 0.5 (what we expect). Given the days on which less than 6 recordings were taken, this slight deviation from the expected ratio is not surprising and likely not problematic.
+
+## Outcome Variable - UPDRS Scores
+We need to see if our outcome variable is normally distributed as most machine learning algorithms and many other analysis techniques assume that it is.
+
+```{r UPDRS, echo = FALSE}
+trials <- select(parkinsons, test_time, motor_UPDRS, total_UPDRS) %>% distinct()
+trials_thin <- gather(trials, "Score_Type", "Score", 2:3)
+ggplot(trials_thin, aes(x = Score, fill = Score_Type)) +
+  geom_histogram(binwidth = 1, position = "dodge")
+```
+
+Very roughly speaking, the data is normally distributed for both motor and total UPDRS. The total UPDRS scores are shifted higher than the motor UPDRS, which makes sense because the range for total UPDRS scores (0-176) is higher than the range for motor UPDRS scores (0-108). All data falls well within these expected ranges and is near the lower end of the ranges, which is expected because all patients in this trial were early stage PD patients.
+
+## Signal Characteristics
+We now get into the variables that are calculated characteristics of the voice recordings. We will look at these in batches.
+
+The first batch is the jitter variables. Jitter is the amount of variation in the fundamental frequency of a sound signal. It can be measured/calculated in different ways, so each of these variables represents a different method for measuring jitter. 
+```{r Jitter, echo = FALSE}
+ggpairs(select(parkinsons, contains("Jitter")))
+```
+
+We can see from the histograms that these variables are all right-skewed. However, we do not necessarily see outliers or unexpected spikes in the data that would indicate likely typos or other inaccurate representations of the true data. We also see from the correlation coefficients and the correlation graphs that these measures are all very highly linearly correlated with each other. The lowest correlation coefficient is 0.791 and Jitter_DDP and Jitter_RAP actually have a correlation coefficient of 1, meaning they are perfectly linearly correlated. However, it is expected that these measures would be highly correlated as they are all essentially different ways of measuring the same thing.
+
+
+The next batch is the shimmer variables. Shimmer is the amount of variation in the amplitude of a sound signal. Again, it can be measured/calculated in different ways, so each of these variables represents a different method for measuring shimmer. 
+```{r Shimmer, echo = FALSE}
+ggpairs(select(parkinsons, contains("Shimmer")))
+```
+
+We find again that these variables are all right-skewed, but do not contain significant outliers or surprising spikes, so it can be assumed that the values represent the true data and do not need to be addressed. Again, they are all highly correlated. The lowest correlation coefficient is 0.886 and Shimmer_APQ3 and Shimmer_DDA are perfectly linearly correlated. But the high correlation coefficients are not surprising as these are all essentially different ways of measuring the same thing.
+
+
+The last batch is all other variables representing signal characteristics, including noise to harmonics ratio, harmonics to noise ratio, and 3 characteristics derived from non-traditional, non-linear signal processing techniques.
+```{r other_signal_Characteristics, echo = FALSE}
+ggpairs(select(parkinsons, NHR:PPE))
+```
+
+These signal characteristics are not as uniform as the previous batches, which is expected because they are measures of different things. The correlation coefficients are not as high and the distribution shapes are more varied. We also see in the correlation plots that some of the variables seem to be non-linear. This is expected because several of these variables were calculated using non-linear processing techniques.
+
+We still do not see any significant outliers or surprising spikes in the histograms, so it can be assumed that the values are an accurate representation of the real data and do not need to be addressed.
+
+```{r write_clean, echo = FALSE}
+write.csv(parkinsons, file = "parkinsons_clean.csv", row.names = FALSE)
+```
+
+# Data Transformation
+There are two major data transformation steps that need to be completed.
+
+The first is splitting the data into training and testing sets so that a predictive model can be built based on the training set and still tested on the test set to indicate how the model might perform on unseen data.
+
+The second is averaging the duplicate recordings that each patient took on each given day to faciliate analysis that adequately addresses the fact that the observations are not truly independent of each other.
+
+## Splitting Testing and Training Sets
+Because the observations are not independent of each other, we cannot do a simple random split. A better split ensures that different patients are well-represented in both training and testing sets, and that the testing set contains patients that are not present in the training set. This ensures that the training set contains a good mix of subjects and is not overfit to a few subjects. It also ensures that model performance is tested on both additional recordings from patients it has already seen as well as recordings from patients it has never seen, which is a good simulation of the types of new recordings we would want the model to perform on in the future.
+
+To achieve such a split, we cannot use the standard sample.split() function. Instead we write a function, groupwise_split(), that selects subjects, according to a given ratio, to be fully allocated to the test set and divides the observations from each of the remaining subjects into the train and test sets according to a given ratio.
+
+It takes as inputs a vector of the group labels (X), the ratio of observations within each group that will go into the training set (obsRatio), the ratio of groups that will be present in the training set (the rest of the groups will be fully allocated into the test set) (groupRatio), and a seed that can be set if the user wishes to obtain a reproducible split. The output is a logical vector with entries corresponding to each observation. TRUE indicates that the observation should be allocated to the training set, and FALSE indicates the testing set.
+
+The following code defines the groupwise_split() function and then uses the function to create train and test sets for the parkinsons dataset.
+
+```{r split_Test_Train}
+groupwise_split <- function(X, obsRatio = 2/3, groupRatio = 1, seed = NULL) {
+  set.seed(seed)
+  groups <- unique(X)  # vector of unique group names
+  index <- 1:length(X)  # create indices
+  table <- cbind(index, X)  # bind indices and group labels
+  
+  obsInd <- list(NULL)  # initiate list
+  for (i in 1:length(groups)){
+    group_i <- subset(table, X == groups[i])[ ,1]  # select all indices of one group
+    # randomly select % of indices of group i
+    obsInd[[i]] <- sample(group_i, round(obsRatio * length(group_i)))
+  }
+  obsLogical <- index %in% unlist(obsInd)  # create logical vector where selected indices = TRUE
+  
+  # randomly select % of groups; create logical vector with these groups=TRUE
+  groupLogical <- X %in% sample(groups, round(groupRatio * length(groups)))
+  
+  split <- ((obsLogical == TRUE) & (groupLogical == TRUE))
+  return(split)
+}
+
+split <- groupwise_split(parkinsons$subject_num, obsRatio = .75, groupRatio = 37/42, seed = 1)
+
+train <- subset(parkinsons, split == TRUE)
+test <- subset(parkinsons, split == FALSE)
+```
+
+
+## Averaging Duplicate Recordings
+For some of the analysis, recordings taken from the same patient on the same day will need to be averaged. However, this will require a fair amount of data exploration to deterine, for example, if recordings taken at normal volume can be averaged with loud recordings, if all recordings can be averaged together on days with 11 or 12 recordings, and if days with less than 6 recordings can still be considered valid data points.
+
+When these questions are addressed, the general method for averaging will be as follows:
+
+```{r average, eval = FALSE}
+parkinsons %>% group_by(subject_num, test_day) %>% summarise_each(funs(mean, sd))
+```
+
+The data may also be grouped by volume, and certain data points may have to be addressed individually or removed before applying this method. There may also be some cleaning to do for factor variables like "sex" that can't be averaged, or new variables that are meaningless like "age_sd" (because age should not vary at all within-subject and within-day). This data wrangling step will be revisited after some exploratory data analysis.
