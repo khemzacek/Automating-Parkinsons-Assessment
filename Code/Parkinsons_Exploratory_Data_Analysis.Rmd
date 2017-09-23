@@ -876,6 +876,34 @@ plot(patient_data$variation_time_of_day, patient_data$total_progression)
 ```
 
 
+```{r plot_sex_time_distrib}
+genderedTime <- parkAvgd %>% group_by(subject_num) %>% summarise(earliest = min(time_of_day), typical = median(time_of_day), latest = max(time_of_day))
+
+genderedTime <- left_join(genderedTime, demographics, by = "subject_num")
+
+plotGenderTime <- genderedTime %>% gather(Category, Time, 2:4)
+plotGenderTime$Category <- as.factor(plotGenderTime$Category)
+plotGenderTime$Category <- factor(plotGenderTime$Category, levels = c("earliest", "typical", "latest"), ordered = TRUE)
+
+posn.j <- position_jitter(height = 0.1)
+ggplot(plotGenderTime, aes(x = Time, y = Category)) +
+  geom_point(position = posn.j, aes(col = sex))
+
+ggplot(genderedTime, aes(x = earliest)) +
+  geom_histogram(binwidth = 1) +
+  facet_grid(sex~., scales = "free_y")
+
+ggplot(genderedTime, aes(x = latest)) +
+  geom_histogram(binwidth = 1) +
+  facet_grid(sex~., scales = "free_y")
+
+ggplot(genderedTime, aes(x = typical)) +
+  geom_histogram(binwidth = 1) +
+  facet_grid(sex~., scales = "free_y")
+
+```
+
+
 # UPDRS normally distributed?
 First, we look at the data prior to any averaging or selection of a set of independent observations.
 ```{r UPDRS, echo = FALSE}
@@ -886,6 +914,17 @@ ggplot(trials_thin, aes(x = Score, fill = Score_Type)) +
 qqnorm(parkinsons$motor_UPDRS)
 qqnorm(parkinsons$total_UPDRS)
 ```
+
+# Mean UPDRS Change
+```{r avg_UPDRS_change}
+mean(abs(patient_data$change_motor_UPDRS)) # 5.167723
+mean(abs(patient_data$change_total_UPDRS)) # 6.395881
+
+median(abs(patient_data$change_motor_UPDRS)) # 4.503
+median(abs(patient_data$change_total_UPDRS)) # 5.389
+```
+
+
 
 ## Selection of Independent Observations Normally Distributed?
 We now look to see if the shape of the graph is different with a set of independent averaged observations.

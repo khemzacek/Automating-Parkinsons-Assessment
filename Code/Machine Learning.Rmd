@@ -22,11 +22,14 @@ corCoeff <- readRDS("corCoeffList.rds")
 
 corCoeff was created in exploratory data analysis section, saved, and loaded into this document. It contains 100 full correlation matrices describing the relationships between all variables of interest.
 
+# Investigate Correlation Coefficients
+## Correlation with motor UPDRS
+
 ```{r updrs_correlation}
 N = 100
 updrs_correlation <- corCoeff[[1]][5, ] # initiate matrix
 for(i in 2:N){
-  updrs_correlation <- rbind(updrs_correlation, corCoeff[[i]][5, ])
+  updrs_correlation <- rbind(updrs_correlation, corCoeff[[i]][5, ]) # select UPDRS coefficients from each correlation matrix; aggregate into matrix
 }
 
 # change to dataframe
@@ -75,13 +78,16 @@ Good Candidates (large median (pos/neg); low IQR):
 * normal_Shimmer_DDA_median (pos)63
 * time_of_day (neg)66*
 
+
+## Correlation between features with high correlation with UPDRS
+
 ```{r intercorrelation}
 bestCandidates <- c("age", "loud_HNR_median", "loud_PPE_median", "loud_Shimmer_APQ11_median", "normal_HNR_median", "normal_PPE_median", "normal_RPDE_median")
 
-# create list of only correlations between candidate features
+# create list of only correlations between best candidate features
 bestCandCoeff <- list(NULL) # initiate list
 for(i in 1:length(corCoeff)){
-   bestCandCoeff[[i]] <- subset(corCoeff[[i]], rownames(corCoeff[[i]]) %in% bestCandidates, colnames(corCoeff[[i]]) %in% bestCandidates)
+   bestCandCoeff[[i]] <- subset(corCoeff[[i]], rownames(corCoeff[[i]]) %in% bestCandidates, colnames(corCoeff[[i]]) %in% bestCandidates) # select and store limited correlation matrices
 }
 
 # create list, each item containing all cor coeffs relating to one feature
@@ -172,6 +178,8 @@ loud_HNR_median, age, normal_DFA_median, time_of_day
 * age, normal_DFA_median, and time_of_day have higher correlation with each other than with many other variables (but still low correlation relative to intercorrelation among other variables).
 * sex could be added to any of these sets
 
+# Split Test/Train Sets
+
 ```{r split_test_train}
 groupwise_split <- function(X, obsRatio = 2/3, groupRatio = 1, seed = NULL) {
   set.seed(seed)
@@ -202,11 +210,11 @@ test <- subset(parkAvgd, split == FALSE)
 ```
 
 
-
+# Function to select sets of independent observations
+Set of independent obaservations = one random observation from each person
 
 ```{r independent_observations}
-independent_selector <- function(matrix, X, N = 1, seed = NULL) {
-  set.seed(seed)
+independent_selector <- function(matrix, X, N = 1) {
   groups <- unique(X)  # vector of unique group names
   index <- 1:length(X)  # create indices
   table <- cbind(index, X)  # bind indices and group labels
@@ -226,6 +234,8 @@ independent_selector <- function(matrix, X, N = 1, seed = NULL) {
 ```
 
 
+# Linear Regression
+## Create Standard Linear Regression Models
 
 ```{r standard_linear_regression}
 # 2 variable model
@@ -380,6 +390,8 @@ mod <- lm(motor_UPDRS ~ age*sex*time_of_day*loud_PPE_median*normal_DFA_median, d
 ```
 
 
+## Create Averaged Linear Regression Models
+
 ```{r independent_linreg}
 # creating model with many subsets of indep vars
 N = 100
@@ -530,6 +542,9 @@ R2 # 0.08608255, 0.1519965, -0.0779731, 0.2324456, -0.2634722, 0.1598314, 0.1977
 # less unstable than last interaction model, but still pretty unstable
 ```
 
+
+# Regression Tree Models
+## Standard Regression Tree Model (CART)
 
 ```{r basic_rpart}
 
@@ -755,6 +770,8 @@ R2 = 1 - SSE/SST
 R2 # 0.7906328
 ```
 
+
+## Create Averaged Regression Tree Model (Forest Model)
 
 ```{r independent_forests}
 N = 100 #number of trees
@@ -1032,6 +1049,7 @@ R2 # 0.1666291, 0.1656189, 0.1506248, 0.1754871, 0.1748978, 0.1661218, 0.1649591
 # 0.1665673 +/- 0.006809069
 ```
 
+## Average More Linear Regression Models
 To be consistent with the number of trees here, we should perhaps use the average of 400 models for linear regression on independent sets.
 
 ```{r N400_linreg}
@@ -1176,11 +1194,16 @@ R2 # 0.2051485, 0.1991503, 0.1625494, 0.2349779, 0.1528565, 0.2295555, 0.0784994
 # vs. w/400: 0.1828741 +/- 0.04612232
 ```
 
+
+# Out-of-Sample Performance
+The days with no loud recordings ended up in the test set. These days cause issues when using the models to predict. Too many values are missing from these observations to use MICE to impute them. We will remove these observations.
+
 ```{r remove_missing}
 test <- subset(test, loud_recs_count >= 1)
 
 ```
 
+Test models' predictive power on the test set (new data).
 
 ```{r out-of-sample_tests}
 # Standard Linreg, Best Variables
@@ -1232,7 +1255,7 @@ R2 # 0.2498027
 
 
 
-N = 500
+N = 1500
 
 # AvgdIndep Linreg, Best Variables
 # build model
@@ -1297,6 +1320,7 @@ R2 = 1 - SSE/SST
 R2 # 0.08789277, 0.100658, -0.03565, 0.07232206, -0.04839899, 0.06165373, -0.003125171, 0.0748603, -0.04179203, -0.09300411
 # 0.01754166 +/- 0.06947045
 
+
 # AvgdIndep Linreg, Less Interactions
 # build model
 model <- lm(motor_UPDRS ~ age*sex*time_of_day + loud_PPE_median + normal_DFA_median, data = independent_selector(train, train$subject_num))
@@ -1331,6 +1355,7 @@ R2 # 0.07697862, 0.06753241, 0.07255408, 0.091085, 0.1041976, 0.1024762, 0.06790
 # 0.07743325 +/- 0.02797615
 
 
+
 # AvgdIndep CART, All Variables
 # create algorithm
 modForest8 <- list(NULL)
@@ -1351,6 +1376,751 @@ SST = sum((test$motor_UPDRS - mean(test$motor_UPDRS))^2)
 R2 = 1 - SSE/SST
 R2 # 0.0766452, 0.06680034, 0.08125375, 0.07336874, 0.05608311, 0.08585367, 0.04868608, 0.06694463, 0.05566609, 0.04634199
 # 0.06576436 +/- 0.01369016
+# 0.0766096
 
+```
+
+# Increase N
+
+Increase N to reduce the variability in models' predictive power when model is built multiple times 
+
+```{r}
+predVars <- select(train, -subject_num, -test_day, -contains("count"), -total_UPDRS)
+
+test <- subset(test, loud_recs_count >= 1)
+```
+
+
+```{r optimize_N}
+N = 1500
+
+
+# AvgdIndep Linreg, Best Variables
+R_Linreg5 <- NULL
+for(R in 1:10){
+  # build model
+  model <- lm(motor_UPDRS ~ age + loud_PPE_median + sex + normal_DFA_median + time_of_day, data = independent_selector(train, train$subject_num))
+  modCoeffs <- model$coefficients
+  for(i in 2:N){
+    model <- NULL
+    model <- lm(motor_UPDRS ~ age + loud_PPE_median + sex + normal_DFA_median + time_of_day, data = independent_selector(train, train$subject_num))
+    modCoeffs <- rbind(modCoeffs, model$coefficients)
+  }
+  row.names(modCoeffs) <- NULL
+  modCoeffs <- as.data.frame(modCoeffs)
+  modFunction5 <- summarise_all(modCoeffs, median)
+  # predict train set
+  modVars <- select(train, motor_UPDRS, age, loud_PPE_median, sex, normal_DFA_median, time_of_day)
+  modVars$sex <- as.numeric(modVars$sex) - 1
+  modVars <- mutate(modVars, prediction = (modFunction5[1, 1]) + 
+                      (age * modFunction5[1, 2]) + 
+                      (loud_PPE_median * modFunction5[1, 3]) + 
+                      (sex * modFunction5[1, 4]) + 
+                      (normal_DFA_median * modFunction5[1, 5]) + 
+                      (time_of_day * modFunction5[1, 6]),  
+                    residuals = motor_UPDRS - prediction)
+  # in-sample R2
+  SSE = sum(modVars$residuals^2)
+  SST = sum((modVars$motor_UPDRS - mean(modVars$motor_UPDRS))^2)
+  R_Linreg5[R] = 1 - SSE/SST
+}
+
+
+# AvgdIndep Linreg, More Interactions
+R_Linreg6 <- NULL
+for(R in 1:10){
+  # build model
+  model <- lm(motor_UPDRS ~ age*sex*time_of_day + loud_PPE_median*normal_DFA_median, data = independent_selector(train, train$subject_num))
+  modCoeffs <- model$coefficients
+  for(i in 2:N){
+    model <- NULL
+    model <- lm(motor_UPDRS ~ age*sex*time_of_day + loud_PPE_median*normal_DFA_median, data = independent_selector(train, train$subject_num))
+    modCoeffs <- rbind(modCoeffs, model$coefficients)
+  }
+  row.names(modCoeffs) <- NULL
+  modCoeffs <- as.data.frame(modCoeffs)
+  modFunction6 <- summarise_all(modCoeffs, median)
+  # predict train set
+  modVars <- select(train, motor_UPDRS, age, sex, time_of_day, loud_PPE_median,  normal_DFA_median)
+  modVars$sex <- as.numeric(modVars$sex) - 1
+  modVars <- mutate(modVars, prediction = (modFunction6[1, 1]) + 
+                      (age * modFunction6[1, 2]) + 
+                      (sex * modFunction6[1, 3]) + 
+                      (time_of_day * modFunction6[1, 4]) + 
+                      (loud_PPE_median * modFunction6[1, 5]) + 
+                      (normal_DFA_median * modFunction6[1, 6]) + 
+                      (age * sex * modFunction6[1, 7]) + 
+                      (age* time_of_day * modFunction6[1, 8]) + 
+                      (sex * time_of_day * modFunction6[1, 9]) + 
+                      (loud_PPE_median * normal_DFA_median * modFunction6[1, 10]) + 
+                      (age * sex * time_of_day * modFunction6[1, 11]),  
+                    residuals = motor_UPDRS - prediction)
+  # in-sample R2
+  SSE = sum(modVars$residuals^2)
+  SST = sum((modVars$motor_UPDRS - mean(modVars$motor_UPDRS))^2)
+  R_Linreg6[R] = 1 - SSE/SST
+}
+
+
+# AvgdIndep Linreg, Less Interactions
+R_Linreg7 <- NULL
+for(R in 1:10){
+  # build model
+  model <- lm(motor_UPDRS ~ age*sex*time_of_day + loud_PPE_median + normal_DFA_median, data = independent_selector(train, train$subject_num))
+  modCoeffs <- model$coefficients
+  for(i in 2:N){
+    model <- NULL
+    model <- lm(motor_UPDRS ~ age*sex*time_of_day + loud_PPE_median + normal_DFA_median, data = independent_selector(train, train$subject_num))
+    modCoeffs <- rbind(modCoeffs, model$coefficients)
+  }
+  row.names(modCoeffs) <- NULL
+  modCoeffs <- as.data.frame(modCoeffs)
+  modFunction7 <- summarise_all(modCoeffs, median)
+  # predict train set
+  modVars <- select(train, motor_UPDRS, age, sex, time_of_day, loud_PPE_median,  normal_DFA_median)
+  modVars$sex <- as.numeric(modVars$sex) - 1
+  modVars <- mutate(modVars, prediction = (modFunction7[1, 1]) + 
+                      (age * modFunction7[1, 2]) + 
+                      (sex * modFunction7[1, 3]) + 
+                      (time_of_day * modFunction7[1, 4]) + 
+                      (loud_PPE_median * modFunction7[1, 5]) + 
+                      (normal_DFA_median * modFunction7[1, 6]) + 
+                      (age * sex * modFunction7[1, 7]) + 
+                      (age* time_of_day * modFunction7[1, 8]) + 
+                      (sex * time_of_day * modFunction7[1, 9]) + 
+                      (age * sex * time_of_day * modFunction7[1, 10]),  
+                    residuals = motor_UPDRS - prediction)
+  # in-sample R2
+  SSE = sum(modVars$residuals^2)
+  SST = sum((modVars$motor_UPDRS - mean(modVars$motor_UPDRS))^2)
+  R_Linreg7[R] = 1 - SSE/SST
+}
+
+
+# AvgdIndep CART, All Variables
+R_CART8 <- NULL
+for(R in 1:10){
+  # build model
+  modForest8 <- list(NULL)
+  for(i in 1:N){
+    modForest8[[i]] <- rpart(motor_UPDRS ~ ., data = independent_selector(predVars, train$subject_num), control = rpart.control(cp = 0.1))
+  }
+  # predict outcomes
+  forestVotes <- predict(modForest8[[1]], newdata = train)
+  for(i in 2:N){
+    forestVotes <- rbind(forestVotes, predict(modForest8[[i]], newdata = train))
+  }
+  row.names(forestVotes) <- NULL
+  forestVotes <- as.data.frame(forestVotes)
+  predictions <- summarise_all(forestVotes, median)
+  # in-sample R2
+  SSE = sum((train$motor_UPDRS - predictions)^2)
+  SST = sum((train$motor_UPDRS - mean(train$motor_UPDRS))^2)
+  R_CART8[R] = 1 - SSE/SST
+}
+
+
+performance <- c(N, mean(R_Linreg5), sd(R_Linreg5), mean(R_Linreg6), sd(R_Linreg6), mean(R_Linreg7), sd(R_Linreg7), mean(R_CART8), sd(R_CART8))
+
+#optimumN <- performance
+
+optimumN <- rbind(optimumN, performance)
+
+
+# rownames(optimumN) <- NULL
+# optimumN <- as.data.frame(optimumN)
+# names(optimumN) <- c("N", "R_Linreg5_mean", "R_Linreg5_sd", "R_Linreg6_mean", "R_Linreg6_sd", "R_Linreg7_mean", "R_Linreg7_sd", "R_CART8_mean", "R_CART8_sd")
+```
+
+
+## Build One Final Model for Each Model Type
+### Seed Setting
+```{r testing_seed_setting}
+N = 10
+
+set.seed(500)
+
+independent_train1 <- list(NULL)
+for(i in 1:N){
+  independent_train1[[i]] <- independent_selector(train, train$subject_num)
+}
+
+independent_train2 <- list(NULL)
+for(i in 1:N){
+  independent_train2[[i]] <- independent_selector(train, train$subject_num)
+}
+
+sum(independent_train1[[10]]$test_day != independent_train2[[10]]$test_day)
+# each set in 1 is equal to parallel set in 2
+
+sum(independent_train1[[1]]$test_day == independent_train1[[10]]$test_day)
+# none of the sets within 1 are equal to each other
+
+```
+
+Bottom line: seed setting works
+
+### Set-up
+```{r data}
+# select training set for averaged models
+N = 2000
+set.seed(500)
+
+indep_train <- list(NULL)
+for(i in 1:N){
+  indep_train[[i]] <- independent_selector(train, train$subject_num)
+}
+
+
+# CART variables
+predVars <- select(train, -subject_num, -test_day, -contains("count"), -total_UPDRS)
+
+indep_predVars <- list(NULL)
+for(i in 1:N){
+  indep_predVars[[i]] <- select(indep_train[[i]], -subject_num, -test_day, -contains("count"), -total_UPDRS)
+}
+
+
+# remove observations with too much missing data to predict
+test <- subset(test, loud_recs_count >= 1)
+
+```
+runtime: ~6s
+
+Since some of the parameters around averaged CART model have changed (N, seed set for training data), want to check that this cp is still what I would have chosen.
+```{r check_cp}
+
+N = 2000
+
+# define cp values to test
+cpGrid <- seq(0.01, 0.5, 0.01)
+
+# test cp values
+R2 <- NULL # initiate Rsquared matrix
+for(j in 1:length(cpGrid)){
+  modForest <- list(NULL)
+  for(i in 1:N){
+    modForest[[i]] <- rpart(motor_UPDRS ~ ., data = indep_predVars[[i]], control = rpart.control(cp = cpGrid[j]))
+  }
+  # predict outcomes
+  forestVotes <- predict(modForest[[1]], newdata = train)
+  for(i in 2:N){
+    forestVotes <- rbind(forestVotes, predict(modForest[[i]], newdata = train))
+  }
+  # matrix to dataframe
+  row.names(forestVotes) <- NULL
+  forestVotes <- as.data.frame(forestVotes)
+  # average "votes" to get predictions
+  predictions <- summarise_all(forestVotes, median)
+  # calculate Rsquared
+  SSE = sum((train$motor_UPDRS - predictions)^2)
+  SST = sum((train$motor_UPDRS - mean(train$motor_UPDRS))^2)
+  R2[j] = 1 - SSE/SST
+}
+# LONG runtime (saved plot) - 3:33
+plot(cpGrid, R2)
+# Still looks like 0.1
+
+```
+Confirmed: use cp = 0.1 for averaged CART
+
+
+### Build Models & Predict Train Set
+```{r build_models}
+# initiate list for storing models
+Models <- list(NULL)
+
+# initiate dataframe for predictions
+plotTrainData <- select(train, subject_num, test_day, motor_UPDRS)
+
+
+
+# Standard Linreg, Best Variables
+# build model
+model1 <- lm(motor_UPDRS ~ age + loud_PPE_median + sex + normal_DFA_median + time_of_day, data = train)
+# save model
+Models[[1]] <- model1$coefficients
+# in-sample R2 = 0.1622
+# train set accuracy
+predictions <- predict(model1, newdata = train)
+residuals <- train$motor_UPDRS - predictions
+sum(abs(residuals) <= 5.2)/length(residuals) # 0.5048951
+sum(abs(residuals) <= 2.5)/length(residuals) # 0.2237762
+# save predictions
+plotTrainData$mod1_predict <- predictions
+
+
+# Standard Linreg, Less Interactions
+# build model
+model2 <- lm(motor_UPDRS ~ age*sex*time_of_day + loud_PPE_median + normal_DFA_median, data = train)
+# save model
+Models[[2]] <- model2$coefficients
+# in-sample R2 = 0.2444
+# train set accuracy
+predictions <- predict(model2, newdata = train)
+residuals <- train$motor_UPDRS - predictions
+sum(abs(residuals) <= 5.2)/length(residuals) # 0.565035
+sum(abs(residuals) <= 2.5)/length(residuals) # 0.2713287
+# save predictions
+plotTrainData$mod2_predict <- predictions
+
+
+# Standard Linreg, More Interactions
+# build model
+model3 <- lm(motor_UPDRS ~ age*sex*time_of_day + loud_PPE_median*normal_DFA_median, data = train)
+# save model
+Models[[3]] <- model3$coefficients
+# in-sample R2 = 0.2653
+# train set accuracy
+predictions <- predict(model3, newdata = train)
+residuals <- train$motor_UPDRS - predictions
+sum(abs(residuals) <= 5.2)/length(residuals) # 0.579021
+sum(abs(residuals) <= 2.5)/length(residuals) # 0.3034965
+# save predictions
+plotTrainData$mod3_predict <- predictions
+
+# Standard CART, All Variables
+# build model
+model4 <- rpart(motor_UPDRS ~ ., data = predVars, control = rpart.control(cp = 0.005))
+# save model
+Models[[4]] <- model4
+# plot tree
+prp(model4, varlen = 7)
+# predict train set
+predictions <- predict(model4)
+residuals <- train$motor_UPDRS - predictions
+# in-sample R2
+SSE = sum((residuals)^2)
+SST = sum((train$motor_UPDRS - mean(train$motor_UPDRS))^2)
+R2 = 1 - SSE/SST
+R2
+# in-sample R2 = 0.8132654
+# train set accuracy
+sum(abs(residuals) <= 5.2)/length(residuals) # 0.8895105
+sum(abs(residuals) <= 2.5)/length(residuals) # 0.6503497
+# save predictions
+plotTrainData$mod4_predict <- predictions
+
+
+
+N = 2000
+
+# AvgdIndep Linreg, Best Variables
+# build model
+model <- lm(motor_UPDRS ~ age + loud_PPE_median + sex + normal_DFA_median + time_of_day, data = indep_train[[1]])
+modCoeffs <- model$coefficients
+for(i in 2:N){
+  model <- lm(motor_UPDRS ~ age + loud_PPE_median + sex + normal_DFA_median + time_of_day, data = indep_train[[i]])
+  modCoeffs <- rbind(modCoeffs, model$coefficients)
+}
+row.names(modCoeffs) <- NULL
+modCoeffs <- as.data.frame(modCoeffs)
+modFunction5 <- summarise_all(modCoeffs, median)
+# save model
+Models[[5]] <- modFunction5
+# predict train set
+modVars <- select(train, motor_UPDRS, age, loud_PPE_median, sex, normal_DFA_median, time_of_day)
+modVars$sex <- as.numeric(modVars$sex) - 1
+modVars <- mutate(modVars, prediction = (modFunction5[1, 1]) + 
+                    (age * modFunction5[1, 2]) + 
+                    (loud_PPE_median * modFunction5[1, 3]) + 
+                    (sex * modFunction5[1, 4]) + 
+                    (normal_DFA_median * modFunction5[1, 5]) + 
+                    (time_of_day * modFunction5[1, 6]),  
+                  residuals = motor_UPDRS - prediction)
+# in-sample R2
+SSE = sum(modVars$residuals^2)
+SST = sum((modVars$motor_UPDRS - mean(modVars$motor_UPDRS))^2)
+R2 = 1 - SSE/SST
+R2
+# in-sample R2 = 0.1611757
+# train set accuracy
+sum(abs(modVars$residuals) <= 5.2)/length(modVars$residuals) # 0.5118881
+sum(abs(modVars$residuals) <= 2.5)/length(modVars$residuals) # 0.2265734
+# save predictions
+plotTrainData$mod5_predict <- modVars$prediction
+
+
+# AvgdIndep Linreg, Less Interactions
+# build model
+model <- lm(motor_UPDRS ~ age*sex*time_of_day + loud_PPE_median + normal_DFA_median, data = indep_train[[1]])
+modCoeffs <- model$coefficients
+for(i in 2:N){
+  model <- lm(motor_UPDRS ~ age*sex*time_of_day + loud_PPE_median + normal_DFA_median, data = indep_train[[i]])
+  modCoeffs <- rbind(modCoeffs, model$coefficients)
+}
+row.names(modCoeffs) <- NULL
+modCoeffs <- as.data.frame(modCoeffs)
+modFunction6 <- summarise_all(modCoeffs, median)
+# save model
+Models[[6]] <- modFunction6
+# predict train set
+modVars <- select(train, motor_UPDRS, age, sex, time_of_day, loud_PPE_median,  normal_DFA_median)
+modVars$sex <- as.numeric(modVars$sex) - 1
+modVars <- mutate(modVars, prediction = (modFunction6[1, 1]) + 
+                    (age * modFunction6[1, 2]) + 
+                    (sex * modFunction6[1, 3]) + 
+                    (time_of_day * modFunction6[1, 4]) + 
+                    (loud_PPE_median * modFunction6[1, 5]) + 
+                    (normal_DFA_median * modFunction6[1, 6]) + 
+                    (age * sex * modFunction6[1, 7]) + 
+                    (age* time_of_day * modFunction6[1, 8]) + 
+                    (sex * time_of_day * modFunction6[1, 9]) + 
+                    (age * sex * time_of_day * modFunction6[1, 10]),  
+                  residuals = motor_UPDRS - prediction)
+# in-sample R2
+SSE = sum(modVars$residuals^2)
+SST = sum((modVars$motor_UPDRS - mean(modVars$motor_UPDRS))^2)
+R2 = 1 - SSE/SST
+R2 
+# in-sample R2 = 0.2233552
+# train set accuracy
+sum(abs(modVars$residuals) <= 5.2)/length(modVars$residuals) # 0.5608392
+sum(abs(modVars$residuals) <= 2.5)/length(modVars$residuals) # 0.2265734
+# save predictions
+plotTrainData$mod6_predict <- modVars$prediction
+
+
+# AvgdIndep Linreg, More Interactions
+# build model
+model <- lm(motor_UPDRS ~ age*sex*time_of_day + loud_PPE_median*normal_DFA_median, data = indep_train[[1]])
+modCoeffs <- model$coefficients
+for(i in 2:N){
+  model <- lm(motor_UPDRS ~ age*sex*time_of_day + loud_PPE_median*normal_DFA_median, data = indep_train[[i]])
+  modCoeffs <- rbind(modCoeffs, model$coefficients)
+}
+row.names(modCoeffs) <- NULL
+modCoeffs <- as.data.frame(modCoeffs)
+modFunction7 <- summarise_all(modCoeffs, median)
+# save model
+Models[[7]] <- modFunction7
+# predict train set
+modVars <- select(train, motor_UPDRS, age, sex, time_of_day, loud_PPE_median,  normal_DFA_median)
+modVars$sex <- as.numeric(modVars$sex) - 1
+modVars <- mutate(modVars, prediction = (modFunction7[1, 1]) + 
+                    (age * modFunction7[1, 2]) + 
+                    (sex * modFunction7[1, 3]) + 
+                    (time_of_day * modFunction7[1, 4]) + 
+                    (loud_PPE_median * modFunction7[1, 5]) + 
+                    (normal_DFA_median * modFunction7[1, 6]) + 
+                    (age * sex * modFunction7[1, 7]) + 
+                    (age* time_of_day * modFunction7[1, 8]) + 
+                    (sex * time_of_day * modFunction7[1, 9]) + 
+                    (loud_PPE_median * normal_DFA_median * modFunction7[1, 10]) + 
+                    (age * sex * time_of_day * modFunction7[1, 11]),  
+                  residuals = motor_UPDRS - prediction)
+# in-sample R2
+SSE = sum(modVars$residuals^2)
+SST = sum((modVars$motor_UPDRS - mean(modVars$motor_UPDRS))^2)
+R2 = 1 - SSE/SST
+R2
+# in-sample R2 = 0.260705
+# train set accuracy
+sum(abs(modVars$residuals) <= 5.2)/length(modVars$residuals) # 0.5692308
+sum(abs(modVars$residuals) <= 2.5)/length(modVars$residuals) # 0.3048951
+# save predictions
+plotTrainData$mod7_predict <- modVars$prediction
+
+
+# AvgdIndep CART, All Variables
+# build model
+modForest8 <- list(NULL)
+for(i in 1:N){
+  modForest8[[i]] <- rpart(motor_UPDRS ~ ., data = indep_predVars[[i]], control = rpart.control(cp = 0.1))
+}
+# save model
+Models[[8]] <- modForest8
+# predict train set
+forestVotes <- predict(modForest8[[1]], newdata = train)
+for(i in 2:N){
+  forestVotes <- rbind(forestVotes, predict(modForest8[[i]], newdata = train))
+}
+row.names(forestVotes) <- NULL
+forestVotes <- as.data.frame(forestVotes)
+predictions <- summarise_all(forestVotes, median)
+residuals <- train$motor_UPDRS - predictions
+# in-sample R2
+SSE = sum((residuals)^2)
+SST = sum((train$motor_UPDRS - mean(train$motor_UPDRS))^2)
+R2 = 1 - SSE/SST
+R2
+# in-sample R2 = 0.172459
+# train set accuracy
+sum(abs(residuals) <= 5.2)/length(residuals) # 0.4937063
+sum(abs(residuals) <= 2.5)/length(residuals) # 0.2307692
+# save predictions
+plotTrainData$mod8_predict <- unname(unlist(predictions[1,]))
+```
+RUNTIMES
+
+modFunction5
+build: ~4s
+predict: ~1s
+
+modFunction6
+build: ~4s
+predict: ~1s
+
+modfunction7
+build: ~4s
+predict: ~1s
+
+modForest8
+build: ~26s
+predict: ~50s
+test predict: ~13s
+
+
+### Predict Train Set
+```{r test_models}
+# initiate dataframe for predictions
+plotTestData <- select(test, subject_num, test_day, motor_UPDRS)
+
+
+
+# Standard Linreg, Best Variables
+# predict test set
+predictTest <- predict(model1, newdata = test)
+residuals <- test$motor_UPDRS - predictTest
+# out-of-sample R2
+SSE = sum((residuals)^2)
+SST = sum((test$motor_UPDRS - mean(test$motor_UPDRS))^2)
+R2 = 1 - SSE/SST
+R2 # 0.04849333
+# test set accuracy
+sum(abs(residuals) <= 5.2)/length(residuals) # 0.3970588
+sum(abs(residuals) <= 2.5)/length(residuals) # 0.1838235
+# save predictions
+plotTestData$mod1_predict <- predictTest
+
+
+# Standard Linreg, Less Interactions
+# predict test set
+predictTest = predict(model2, newdata = test)
+residuals <- test$motor_UPDRS - predictTest
+# out-of-sample R2
+SSE = sum((residuals)^2)
+SST = sum((test$motor_UPDRS - mean(test$motor_UPDRS))^2)
+R2 = 1 - SSE/SST
+R2 # 0.089698
+# test set accuracy
+sum(abs(residuals) <= 5.2)/length(residuals) # 0.4191176
+sum(abs(residuals) <= 2.5)/length(residuals) # 0.2316176
+# save predictions
+plotTestData$mod2_predict <- predictTest
+
+
+# Standard Linreg, More Interactions
+# predict test set
+predictTest = predict(model3, newdata = test)
+residuals <- test$motor_UPDRS - predictTest
+# out-of-sample R2
+SSE = sum((residuals)^2)
+SST = sum((test$motor_UPDRS - mean(test$motor_UPDRS))^2)
+R2 = 1 - SSE/SST
+R2 # 0.1001847
+# test set accuracy
+sum(abs(residuals) <= 5.2)/length(residuals) # 0.4301471
+sum(abs(residuals) <= 2.5)/length(residuals) # 0.2389706
+# save predictions
+plotTestData$mod3_predict <- predictTest
+
+
+# Standard CART, All Variables
+# predict test set
+predictTest = predict(model4, newdata = test)
+residuals <- test$motor_UPDRS - predictTest
+# out-of-sample R2
+SSE = sum((residuals)^2)
+SST = sum((test$motor_UPDRS - mean(test$motor_UPDRS))^2)
+R2 = 1 - SSE/SST
+R2 # 0.2498027
+# test set accuracy
+sum(abs(residuals) <= 10.8)/length(residuals) # 0.8492647
+sum(abs(residuals) <= 5.2)/length(residuals) # 0.5625
+sum(abs(residuals) <= 2.5)/length(residuals) # 0.3860294
+# save predictions
+plotTestData$mod4_predict <- predictTest
+
+
+
+N = 2000
+
+# AvgdIndep Linreg, Best Variables
+# predict test set
+modVars <- select(test, motor_UPDRS, age, loud_PPE_median, sex, normal_DFA_median, time_of_day)
+modVars$sex <- as.numeric(modVars$sex) - 1
+modVars <- mutate(modVars, prediction = (modFunction5[1, 1]) + 
+                    (age * modFunction5[1, 2]) + 
+                    (loud_PPE_median * modFunction5[1, 3]) + 
+                    (sex * modFunction5[1, 4]) + 
+                    (normal_DFA_median * modFunction5[1, 5]) + 
+                    (time_of_day * modFunction5[1, 6]),  
+                  residuals = motor_UPDRS - prediction)
+# out-of-sample R2
+SSE = sum(modVars$residuals^2)
+SST = sum((modVars$motor_UPDRS - mean(modVars$motor_UPDRS))^2)
+R2 = 1 - SSE/SST
+R2 # 0.04975923
+# test set accuracy
+sum(abs(modVars$residuals) <= 5.2)/length(modVars$residuals) # 0.4080882
+sum(abs(modVars$residuals) <= 2.5)/length(modVars$residuals) # 0.1838235
+# save predictions
+plotTestData$mod5_predict <- modVars$prediction
+
+
+# AvgdIndep Linreg, Less Interactions
+# predict test set
+modVars <- select(test, motor_UPDRS, age, sex, time_of_day, loud_PPE_median,  normal_DFA_median)
+modVars$sex <- as.numeric(modVars$sex) - 1
+modVars <- mutate(modVars, prediction = (modFunction6[1, 1]) + 
+                    (age * modFunction6[1, 2]) + 
+                    (sex * modFunction6[1, 3]) + 
+                    (time_of_day * modFunction6[1, 4]) + 
+                    (loud_PPE_median * modFunction6[1, 5]) + 
+                    (normal_DFA_median * modFunction6[1, 6]) + 
+                    (age * sex * modFunction6[1, 7]) + 
+                    (age* time_of_day * modFunction6[1, 8]) + 
+                    (sex * time_of_day * modFunction6[1, 9]) + 
+                    (age * sex * time_of_day * modFunction6[1, 10]),  
+                  residuals = motor_UPDRS - prediction)
+# out-of-sample R2
+SSE = sum(modVars$residuals^2)
+SST = sum((modVars$motor_UPDRS - mean(modVars$motor_UPDRS))^2)
+R2 = 1 - SSE/SST
+R2 # 0.1030394
+# test set accuracy
+sum(abs(modVars$residuals) <= 5.2)/length(modVars$residuals) # 0.4301471
+sum(abs(modVars$residuals) <= 2.5)/length(modVars$residuals) # 0.1985294
+# save predictions
+plotTestData$mod6_predict <- modVars$prediction
+
+
+# AvgdIndep Linreg, More Interactions
+# predict test set
+modVars <- select(test, motor_UPDRS, age, sex, time_of_day, loud_PPE_median,  normal_DFA_median)
+modVars$sex <- as.numeric(modVars$sex) - 1
+modVars <- mutate(modVars, prediction = (modFunction7[1, 1]) + 
+                    (age * modFunction7[1, 2]) + 
+                    (sex * modFunction7[1, 3]) + 
+                    (time_of_day * modFunction7[1, 4]) + 
+                    (loud_PPE_median * modFunction7[1, 5]) + 
+                    (normal_DFA_median * modFunction7[1, 6]) + 
+                    (age * sex * modFunction7[1, 7]) + 
+                    (age* time_of_day * modFunction7[1, 8]) + 
+                    (sex * time_of_day * modFunction7[1, 9]) + 
+                    (loud_PPE_median * normal_DFA_median * modFunction7[1, 10]) + 
+                    (age * sex * time_of_day * modFunction7[1, 11]),  
+                  residuals = motor_UPDRS - prediction)
+# out-of-sample R2
+SSE = sum(modVars$residuals^2)
+SST = sum((modVars$motor_UPDRS - mean(modVars$motor_UPDRS))^2)
+R2 = 1 - SSE/SST
+R2 # 0.1005509
+# test set accuracy
+sum(abs(modVars$residuals) <= 5.2)/length(modVars$residuals) # 0.4338235
+sum(abs(modVars$residuals) <= 2.5)/length(modVars$residuals) # 0.2352941
+# save predictions
+plotTestData$mod7_predict <- modVars$prediction
+
+
+# AvgdIndep CART, All Variables
+# predict test set
+forestVotes <- predict(modForest8[[1]], newdata = test)
+for(i in 2:N){
+  forestVotes <- rbind(forestVotes, predict(modForest8[[i]], newdata = test))
+}
+row.names(forestVotes) <- NULL
+forestVotes <- as.data.frame(forestVotes)
+predictions <- summarise_all(forestVotes, median)
+residuals <- test$motor_UPDRS - predictions
+# out-of-sample R2
+SSE = sum((residuals)^2)
+SST = sum((test$motor_UPDRS - mean(test$motor_UPDRS))^2)
+R2 = 1 - SSE/SST
+R2 # 0.06886496
+# test set accuracy
+sum(abs(residuals) <= 5.2)/length(residuals) # 0.3786765
+sum(abs(residuals) <= 2.5)/length(residuals) # 0.1727941
+# save predictions
+plotTestData$mod8_predict <- unname(unlist(predictions[1,]))
+```
+
+
+## Accuracy
+
+To get a more interpretable metric, we want to see how often the models could predict within a certain range.
+
+According to a study of what constitutes a clinically important difference (CID) on motor UPDRS scores:
+minimum CID: 2.5
+moderate CID: 5.2
+large CID: 10.8
+
+Also of interest when determining this range - average change in motor UPDRS over the course of this 6 month study. Part of the point of the AHTD is to get more frequent measurements. If we can't get more accurate than just predicting the first or last UPDRS over the 6 months of the study, then the additional measurements may not be useful.
+Mean change: ~5.2
+Median change: ~4.5
+
+We will determine the percent which fall into the range of [target UPDRS +/- 5.2], representing a deviation from the target with moderate clinical importance and also a difference comparable to the average change between 0 and 6 months visits. We may also calculate the percent which fall into the range of [target UPDRS +/- 2.5], which would represent a minimum deviation of clinical importance.
+
+The code to calculate the percentages within these ranges will be added above, after the calculations of predictions and associated R2.
+
+
+## Plot Outputs
+
+```{r save_models_predictions}
+saveRDS(Models, "Models.rds")
+saveRDS(plotTrainData, "train_set_predictions.rds")
+saveRDS(plotTestData, "test_set_predictions.rds")
+```
+
+
+```{r plot_predictions}
+ggplot(plotTrainData) +
+  geom_point(aes(x = motor_UPDRS, y = mod1_predict), color = "forest green") +
+  geom_point(aes(x = motor_UPDRS, y = motor_UPDRS), color = "black")
+
+ggplot(plotTrainData) +
+  geom_point(aes(x = motor_UPDRS, y = mod2_predict), color = "forest green") +
+  geom_point(aes(x = motor_UPDRS, y = motor_UPDRS), color = "black")
+
+ggplot(plotTrainData) +
+  geom_point(aes(x = motor_UPDRS, y = mod3_predict), color = "forest green") +
+  geom_point(aes(x = motor_UPDRS, y = motor_UPDRS), color = "black")
+
+ggplot(plotTrainData) +
+  geom_point(aes(x = motor_UPDRS, y = mod4_predict), color = "forest green") +
+  geom_point(aes(x = motor_UPDRS, y = motor_UPDRS), color = "black")
+
+ggplot(plotTrainData) +
+  geom_point(aes(x = motor_UPDRS, y = mod5_predict), color = "forest green") +
+  geom_point(aes(x = motor_UPDRS, y = motor_UPDRS), color = "black")
+
+ggplot(plotTrainData) +
+  geom_point(aes(x = motor_UPDRS, y = mod6_predict), color = "forest green") +
+  geom_point(aes(x = motor_UPDRS, y = motor_UPDRS), color = "black")
+
+ggplot(plotTrainData) +
+  geom_point(aes(x = motor_UPDRS, y = mod7_predict), color = "forest green") +
+  geom_point(aes(x = motor_UPDRS, y = motor_UPDRS), color = "black")
+
+ggplot(plotTrainData) +
+  geom_point(aes(x = motor_UPDRS, y = mod8_predict), color = "forest green") +
+  geom_point(aes(x = motor_UPDRS, y = motor_UPDRS), color = "black")
+
+
+# facet wrap
+oneTrainPlot <- gather(plotTrainData, model, prediction, 4:11)
+
+ggplot(oneTrainPlot) +
+  geom_point(aes(x = motor_UPDRS, y = prediction), color = "forest green") +
+  geom_point(aes(x = motor_UPDRS, y = motor_UPDRS), color = "black") +
+  facet_wrap(~model, ncol = 4)
+
+oneTestPlot <- gather(plotTestData, model, prediction, 4:11)
+
+ggplot(oneTestPlot) +
+  geom_point(aes(x = motor_UPDRS, y = prediction), color = "forest green") +
+  geom_point(aes(x = motor_UPDRS, y = motor_UPDRS), color = "black") +
+  facet_wrap(~model, ncol = 4)
 ```
 
